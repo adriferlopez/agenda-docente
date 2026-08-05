@@ -1,0 +1,19 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Cada docente solo puede leer/escribir dentro de su propia carpeta
+    // /users/{uid}/... Ejemplo:
+    //  - /users/{uid}/annual/{planId}.jpg (imagen de referencia programación anual)
+    // Nota: los adjuntos de Reuniones usan enlaces de Google Drive y no
+    // requieren Storage. Este bucket es opcional; solo es necesario si
+    // activas la subida de imagen de referencia en Programación anual.
+    match /users/{userId}/{allPaths=**} {
+      allow read, write: if request.auth != null
+                          && request.auth.uid == userId
+                          && request.resource.size < 10 * 1024 * 1024
+                          && request.resource.contentType.matches('image/.*');
+    }
+  }
+}

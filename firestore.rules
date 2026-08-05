@@ -1,0 +1,116 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(resourceOwnerId) {
+      return isSignedIn() && request.auth.uid == resourceOwnerId;
+    }
+
+    // ------------------------------------------------------------
+    // Perfil de usuario
+    // ------------------------------------------------------------
+    match /users/{userId} {
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      // El usuario puede editar su perfil, pero NUNCA desde el cliente puede
+      // escribir el campo geminiApiKeyEncrypted (eso solo lo hacen las
+      // Cloud Functions con privilegios de administrador).
+      allow create: if isSignedIn() && request.auth.uid == userId
+                     && !('geminiApiKeyEncrypted' in request.resource.data);
+      allow update: if isSignedIn() && request.auth.uid == userId
+                     && !('geminiApiKeyEncrypted' in request.resource.data.diff(resource.data).affectedKeys());
+      allow delete: if false;
+    }
+
+    // ------------------------------------------------------------
+    // Cursos escolares
+    // ------------------------------------------------------------
+    match /schoolYears/{yearId} {
+      allow read: if isOwner(resource.data.ownerId);
+      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update, delete: if isOwner(resource.data.ownerId);
+    }
+
+    // ------------------------------------------------------------
+    // Asignaturas
+    // ------------------------------------------------------------
+    match /subjects/{subjectId} {
+      allow read: if isOwner(resource.data.ownerId);
+      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update, delete: if isOwner(resource.data.ownerId);
+    }
+
+    // ------------------------------------------------------------
+    // Horario escolar
+    // ------------------------------------------------------------
+    match /timetableSlots/{slotId} {
+      allow read: if isOwner(resource.data.ownerId);
+      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update, delete: if isOwner(resource.data.ownerId);
+    }
+
+    // ------------------------------------------------------------
+    // Franjas horarias configurables
+    // ------------------------------------------------------------
+    match /timeSlotDefs/{defId} {
+      allow read: if isOwner(resource.data.ownerId);
+      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update, delete: if isOwner(resource.data.ownerId);
+    }
+
+    // ------------------------------------------------------------
+    // Reuniones
+    // ------------------------------------------------------------
+    match /meetings/{meetingId} {
+      allow read: if isOwner(resource.data.ownerId);
+      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update, delete: if isOwner(resource.data.ownerId);
+    }
+
+    // ------------------------------------------------------------
+    // Programación semanal
+    // ------------------------------------------------------------
+    match /weeklyPlans/{planId} {
+      allow read: if isOwner(resource.data.ownerId);
+      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update, delete: if isOwner(resource.data.ownerId);
+    }
+
+    // ------------------------------------------------------------
+    // Saberes / contenidos curriculares
+    // ------------------------------------------------------------
+    match /curriculumItems/{itemId} {
+      allow read: if isOwner(resource.data.ownerId);
+      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update, delete: if isOwner(resource.data.ownerId);
+    }
+
+    // ------------------------------------------------------------
+    // Grupos de alumnos y alumnos
+    // ------------------------------------------------------------
+    match /studentGroups/{groupId} {
+      allow read: if isOwner(resource.data.ownerId);
+      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update, delete: if isOwner(resource.data.ownerId);
+    }
+
+    match /students/{studentId} {
+      allow read: if isOwner(resource.data.ownerId);
+      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update, delete: if isOwner(resource.data.ownerId);
+    }
+
+    // ------------------------------------------------------------
+    // Banco de comentarios de notas
+    // ------------------------------------------------------------
+    match /commentTemplates/{templateId} {
+      allow read: if isOwner(resource.data.ownerId);
+      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update, delete: if isOwner(resource.data.ownerId);
+    }
+  }
+}

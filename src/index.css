@@ -1,0 +1,103 @@
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Quicksand:wght@400;500;600;700&family=Nunito:wght@400;500;600;700;800&display=swap');
+@import "tailwindcss";
+
+@theme {
+  /* Familias tipográficas */
+  --font-display: "Fredoka", "Quicksand", sans-serif; /* lettering / títulos */
+  --font-sans: "Nunito", system-ui, sans-serif;
+
+  /* Paleta pastel principal */
+  --color-lav-50: #F5F3FF;
+  --color-lav-100: #EDE9FE;
+  --color-lav-200: #DDD6FE;
+  --color-lav-300: #C4B5FD;
+  --color-lav-400: #A78BFA;
+  --color-lav-500: #8B7CF6;
+  --color-lav-600: #7C6AE8;
+
+  --color-mint-50: #ECFDF5;
+  --color-mint-100: #D1FAE5;
+  --color-mint-200: #A7F3D0;
+  --color-mint-300: #6EE7B7;
+  --color-mint-400: #34D399;
+  --color-mint-600: #0F9D72;
+
+  --color-peach-50: #FFF5F0;
+  --color-peach-100: #FFE4D6;
+  --color-peach-200: #FFCBB3;
+  --color-peach-300: #FFAD8A;
+  --color-peach-400: #FF8A65;
+  --color-peach-600: #E8602F;
+
+  --color-rose-50: #FFF0F5;
+  --color-rose-100: #FCE7F3;
+  --color-rose-200: #FBCFE8;
+  --color-rose-300: #F9A8D4;
+  --color-rose-400: #F472B6;
+  --color-rose-600: #DB4A92;
+
+  --color-sky-50: #F0F9FF;
+  --color-sky-100: #E0F2FE;
+  --color-sky-200: #BAE6FD;
+  --color-sky-300: #7DD3FC;
+  --color-sky-400: #38BDF8;
+  --color-sky-600: #0284C7;
+
+  --color-butter-50: #FFFBEB;
+  --color-butter-100: #FEF3C7;
+  --color-butter-200: #FDE68A;
+  --color-butter-300: #FCD34D;
+  --color-butter-400: #FBBF24;
+  --color-butter-600: #D97706;
+
+  --color-ink: #2D2A3D;
+  --color-ink-soft: #5B5670;
+  --color-cloud: #FAF9FC;
+
+  --radius-card: 20px;
+  --radius-pill: 999px;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--color-cloud);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, .font-display {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+/* Scrollbar suave */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-lav-200);
+  border-radius: 999px;
+}
+
+.card-pastel {
+  background: white;
+  border-radius: var(--radius-card);
+  border: 1px solid rgba(0,0,0,0.04);
+  box-shadow: 0 4px 20px -8px rgba(124, 106, 232, 0.18);
+}
+
+.btn-pill {
+  border-radius: var(--radius-pill);
+  font-weight: 600;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.btn-pill:active {
+  transform: scale(0.97);
+}
