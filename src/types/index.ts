@@ -178,3 +178,64 @@ export interface CommentTemplate {
   text: string; // "{nombre} ha mostrado una actitud {actitud:positiva/negativa/mejorable} hacia..."
   createdAt: number;
 }
+
+// ---------------------------------------------------------------------
+// Rúbricas y notas
+// ---------------------------------------------------------------------
+
+export const EVALUATIONS = ['1', '2', '3'] as const;
+export type Evaluation = typeof EVALUATIONS[number]; // "1" | "2" | "3"
+
+export const GRADE_LABELS: Record<string, string> = {
+  '0-4.9': 'Insuficiente',
+  '5-5.9': 'Suficiente',
+  '6-6.9': 'Bien',
+  '7-8.9': 'Notable',
+  '9-10': 'Excelente',
+};
+
+/** Un criterio de evaluación dentro de una rúbrica de notas. */
+export interface GradingCriterion {
+  id: string;
+  name: string; // "Comprensión lectora"
+  description?: string;
+  weight: number; // peso porcentual (0-100), la suma de todos debe ser 100
+  // Indicadores por nivel descriptivo (4 niveles: 1=Insuficiente...4=Excelente)
+  indicators: [string, string, string, string];
+}
+
+/**
+ * Una rúbrica de evaluación, reutilizable entre alumnos y evaluaciones.
+ * Puede ser prediseñada (LOMLOE) o propia del docente.
+ */
+export interface Rubric {
+  id: string;
+  ownerId: string; // vacío "" si es prediseñada (global, solo lectura)
+  schoolYearId?: string; // vacío si es prediseñada
+  subjectId?: string; // si está vinculada a una asignatura concreta
+  name: string; // "Rúbrica LOMLOE Lengua Castellana - Cataluña"
+  community?: string; // "Cataluña", "Madrid", etc. (solo rúbricas LOMLOE)
+  isLomloe: boolean;
+  criteria: GradingCriterion[];
+  createdAt: number;
+}
+
+/**
+ * Nota de un alumno en una evaluación, aplicando una rúbrica concreta.
+ * Cada criterio tiene una puntuación numérica (0-10).
+ */
+export interface GradeEntry {
+  id: string;
+  ownerId: string;
+  schoolYearId: string;
+  studentId: string;
+  subjectId: string;
+  rubricId: string;
+  evaluation: Evaluation; // "1" | "2" | "3"
+  // Puntuación por criterio: { [criterionId]: puntuación 0-10 }
+  scores: Record<string, number>;
+  // Nota final calculada (media ponderada de los criterios)
+  finalScore: number;
+  notes?: string; // observaciones del docente
+  updatedAt: number;
+}

@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/firebase/config';
@@ -8,7 +8,7 @@ import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
-import { IconLock, IconCheck, IconCalendar, IconBooks as IconDrive } from '@/components/ui/icons';
+import { IconLock, IconCheck } from '@/components/ui/icons';
 import type { Language } from '@/types';
 
 const LANGUAGES: { value: Language; label: string }[] = [
@@ -62,26 +62,6 @@ export default function SettingsPage() {
       {/* IA / Gemini */}
       <GeminiKeyCard />
 
-      {/* Integraciones */}
-      <Card className="flex flex-col gap-3">
-        <h2 className="font-display text-lg text-ink">{t('settings.integrations')}</h2>
-        <IntegrationRow
-          icon={<IconCalendar size={18} />}
-          label={t('settings.connectGoogleCalendar')}
-          connected={profile?.googleCalendarConnected}
-        />
-        <IntegrationRow
-          icon={<IconCalendar size={18} />}
-          label={t('settings.connectAppleCalendar')}
-          connected={false}
-        />
-        <IntegrationRow
-          icon={<IconDrive size={18} />}
-          label={t('settings.connectGoogleDrive')}
-          connected={profile?.googleDriveConnected}
-        />
-      </Card>
-
       {/* Seguridad */}
       <Card className="flex flex-col gap-3">
         <h2 className="font-display text-lg text-ink">{t('settings.security')}</h2>
@@ -94,21 +74,6 @@ export default function SettingsPage() {
         </div>
         <p className="text-xs text-ink-soft">{t('settings.deleteAccountWarning')}</p>
       </Card>
-    </div>
-  );
-}
-
-function IntegrationRow({ icon, label, connected }: { icon: ReactNode; label: string; connected?: boolean }) {
-  const { t } = useTranslation();
-  return (
-    <div className="flex items-center justify-between gap-3 bg-lav-50/50 rounded-2xl px-3 py-2.5">
-      <div className="flex items-center gap-2 text-sm text-ink">
-        {icon}
-        {label}
-      </div>
-      <Button size="sm" variant={connected ? 'secondary' : 'primary'}>
-        {connected ? t('settings.connected') : t('settings.notConnected')}
-      </Button>
     </div>
   );
 }

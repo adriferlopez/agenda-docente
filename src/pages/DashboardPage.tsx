@@ -10,7 +10,7 @@ import { getWeekStart, formatWeekLabel } from '@/utils/dates';
 import Card from '@/components/ui/Card';
 import { subjectColorClasses } from '@/components/ui/subjectColors';
 import { IconTable, IconNotebook, IconFileText, IconBooks, IconCalendar } from '@/components/ui/icons';
-import { IconUsers, IconClipboard } from '@/components/ui/icons-extra';
+import { IconUsers, IconClipboard, IconGrades } from '@/components/ui/icons-extra';
 import { specialTypeLabel } from '@/utils/timetableDisplay';
 import type { Subject, TimetableSlot, WeeklyPlan, WeekDay } from '@/types';
 
@@ -106,7 +106,8 @@ export default function DashboardPage() {
         <QuickLink to="/anual" icon={<IconFileText size={20} />} label={t('nav.annual')} color="peach" />
         <QuickLink to="/asignaturas" icon={<IconBooks size={20} />} label={t('nav.subjects')} color="rose" />
       </div>
-      <div className="grid grid-cols-3 gap-3 md:hidden">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 md:hidden">
+        <QuickLink to="/notas" icon={<IconGrades size={20} />} label={t('nav.grades')} color="mint" />
         <QuickLink to="/alumnos" icon={<IconUsers size={20} />} label={t('nav.students')} color="sky" />
         <QuickLink to="/comentarios" icon={<IconClipboard size={20} />} label={t('nav.comments')} color="butter" />
         <QuickLink to="/reuniones" icon={<IconCalendar size={20} />} label={t('nav.meetings')} color="lav" />

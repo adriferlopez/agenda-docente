@@ -19,6 +19,7 @@ const AnnualPlanningPage = lazy(() => import('@/pages/AnnualPlanningPage'));
 const SubjectsPage = lazy(() => import('@/pages/SubjectsPage'));
 const StudentsPage = lazy(() => import('@/pages/StudentsPage'));
 const CommentsPage = lazy(() => import('@/pages/CommentsPage'));
+const GradesPage = lazy(() => import('@/pages/GradesPage'));
 
 function PageFallback() {
   return <div className="text-sm text-ink-soft p-4">Cargando...</div>;
@@ -69,6 +70,14 @@ function AppRoutes() {
             element={
               <Suspense fallback={<PageFallback />}>
                 <CommentsPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/notas"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <GradesPage />
               </Suspense>
             }
           />

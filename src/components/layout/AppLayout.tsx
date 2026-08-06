@@ -10,7 +10,7 @@ import {
   IconSettings,
   IconLogout,
 } from '@/components/ui/icons';
-import { IconUsers, IconClipboard } from '@/components/ui/icons-extra';
+import { IconUsers, IconClipboard, IconGrades } from '@/components/ui/icons-extra';
 import { signOut } from '@/firebase/auth';
 import { useAuthStore } from '@/store/authStore';
 
@@ -26,6 +26,7 @@ const mainNavItems = [
 // Ítems secundarios: solo en el sidebar desktop (en móvil se accede desde
 // los accesos del Dashboard, para no saturar el bottom nav).
 const secondaryNavItems = [
+  { to: '/notas', icon: IconGrades, key: 'nav.grades' },
   { to: '/alumnos', icon: IconUsers, key: 'nav.students' },
   { to: '/comentarios', icon: IconClipboard, key: 'nav.comments' },
   { to: '/reuniones', icon: IconCalendar, key: 'nav.meetings' },
