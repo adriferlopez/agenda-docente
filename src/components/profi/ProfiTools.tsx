@@ -43,8 +43,9 @@ import Button from '@/components/ui/Button';
 import { Select } from '@/components/ui/Select';
 import { Input, Textarea } from '@/components/ui/Input';
 import TagMultiSelect from '@/components/ui/TagMultiSelect';
-import { IconCheck, IconFileText, IconCalendar, IconMail } from '@/components/ui/icons';
+import { IconCheck, IconFileText, IconCalendar, IconMail, IconRefresh, IconChevronLeft, IconChevronRight } from '@/components/ui/icons';
 import { IconCopy, IconGrades, IconUsers } from '@/components/ui/icons-extra';
+import RubricCriteriaEditor from '@/components/rubric/RubricCriteriaEditor';
 
 export type ProfiToolId = 'exam' | 'unit' | 'analyze' | 'adapt' | 'family';
 
@@ -646,6 +647,19 @@ function getSubjectSaberCatalog(subject: Subject, curriculum: EtapaCurriculum | 
   return items;
 }
 
+interface RubricGenState {
+  generating: boolean;
+  error: string;
+  rubricName: string;
+  criteria: Awaited<ReturnType<typeof generateRubricFromCurriculum>>['criteria'] | null;
+  approving: boolean;
+  approved: boolean;
+}
+
+function emptyRubricState(): RubricGenState {
+  return { generating: false, error: '', rubricName: '', criteria: null, approving: false, approved: false };
+}
+
 function PlanUnitTool({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation();
   const { ownerId, schoolYearId, ready, profile, language, subjects } = useOwnerContext();
@@ -669,7 +683,6 @@ function PlanUnitTool({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState('');
   const [unitLabel, setUnitLabel] = useState('');
   const [sessions, setSessions] = useState<PlannedUnitSession[] | null>(null);
-  const [rubricCopyText, setRubricCopyText] = useState('');
   const [saving, setSaving] = useState(false);
   const [savedCount, setSavedCount] = useState<number | null>(null);
   const [savedTargets, setSavedTargets] = useState<{ weekStart: string; slot: TimetableSlot }[] | null>(null);
@@ -692,6 +705,15 @@ function PlanUnitTool({ onClose }: { onClose: () => void }) {
   const [savingSaFields, setSavingSaFields] = useState(false);
   const [saFieldsSaved, setSaFieldsSaved] = useState(false);
   const [saError, setSaError] = useState('');
+
+  // Rúbricas por sesión evaluable: el estado vive aquí (no dentro de cada
+  // SessionRubricPanel) para poder generarlas todas en bloque y navegarlas
+  // en un carrusel, en vez de que cada panel sea una isla independiente.
+  const { activeYear } = useSchoolYears();
+  const [rubricStates, setRubricStates] = useState<Record<number, RubricGenState>>({});
+  const [bulkGenerating, setBulkGenerating] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
+  const [rubricCarouselIndex, setRubricCarouselIndex] = useState(0);
 
   // Borradores: la planificación se guarda sola (con un pequeño retraso)
   // mientras el docente la revisa/edita, para poder cerrar Profi a medias y
@@ -736,7 +758,6 @@ function PlanUnitTool({ onClose }: { onClose: () => void }) {
         saId,
         unitLabel,
         sessions,
-        rubricCopyText,
         sessionCount,
         ceIds: [...ceIds],
         howToWorkByCe,
@@ -756,14 +777,15 @@ function PlanUnitTool({ onClose }: { onClose: () => void }) {
     }, 1500);
     return () => clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessions, unitLabel, rubricCopyText, saId, sessionCount, ceIds, howToWorkByCe, contentsToWorkOn, threadIdea, selectedMethodologyIds, customMethodology, selectedMaterialIds, customMaterial, finalProduct, hasExam, groupNotes, startDate]);
+  }, [sessions, unitLabel, saId, sessionCount, ceIds, howToWorkByCe, contentsToWorkOn, threadIdea, selectedMethodologyIds, customMethodology, selectedMaterialIds, customMaterial, finalProduct, hasExam, groupNotes, startDate]);
 
   function resumeDraft(d: ProfiUnitDraft) {
     setSubjectId(d.subjectId);
     setSaId(d.saId ?? '');
     setUnitLabel(d.unitLabel);
     setSessions(d.sessions);
-    setRubricCopyText(d.rubricCopyText);
+    setRubricStates({});
+    setRubricCarouselIndex(0);
     setSessionCount(d.sessionCount);
     setCeIds(new Set(d.ceIds));
     setHowToWorkByCe(d.howToWorkByCe ?? {});
@@ -791,6 +813,124 @@ function PlanUnitTool({ onClose }: { onClose: () => void }) {
   }
 
   const subject = subjects.find((s) => s.id === subjectId);
+
+  // Índices (dentro de `sessions`) de las sesiones evaluables: son las que
+  // tienen panel de rúbrica propio, tanto en la lista normal como en el
+  // carrusel cuando hay más de una.
+  const evaluatedIndices = useMemo(
+    () => (sessions ? sessions.map((s, i) => (s.isEvaluated ? i : -1)).filter((i) => i >= 0) : []),
+    [sessions]
+  );
+
+  function getRubricState(i: number): RubricGenState {
+    return rubricStates[i] ?? emptyRubricState();
+  }
+
+  async function generateSessionRubric(i: number) {
+    if (!subject || !sessions) return;
+    const session = sessions[i];
+    setRubricStates((prev) => ({ ...prev, [i]: { ...getRubricState(i), generating: true, error: '' } }));
+    try {
+      const relevantCe = cePool.filter((ce) => session.ceIds.includes(ce.id));
+      const result = await generateRubricFromCurriculum({
+        subjectName: subject.name,
+        courseLevel: subject.courseLevel,
+        activityDescription: [session.evaluationName, session.title, session.description].filter(Boolean).join(' — '),
+        competencies: relevantCe.length > 0 ? relevantCe : undefined,
+        language,
+      });
+      setRubricStates((prev) => ({
+        ...prev,
+        [i]: { ...getRubricState(i), generating: false, rubricName: result.rubricName, criteria: result.criteria },
+      }));
+    } catch (err) {
+      setRubricStates((prev) => ({
+        ...prev,
+        [i]: { ...getRubricState(i), generating: false, error: err instanceof Error ? err.message : String(err) },
+      }));
+    }
+  }
+
+  function updateRubricCriteria(i: number, criteria: RubricGenState['criteria']) {
+    setRubricStates((prev) => ({ ...prev, [i]: { ...getRubricState(i), criteria } }));
+  }
+
+  async function approveSessionRubric(i: number) {
+    if (!subject || !sessions) return;
+    const state = getRubricState(i);
+    if (!state.criteria) return;
+    const session = sessions[i];
+    const target = savedTargets?.[i];
+    setRubricStates((prev) => ({ ...prev, [i]: { ...getRubricState(i), approving: true, error: '' } }));
+    try {
+      if (!activeYear) {
+        setRubricStates((prev) => ({ ...prev, [i]: { ...getRubricState(i), approving: false, error: t('profi.tools.exam.noTerm') } }));
+        return;
+      }
+      const terms = getEffectiveTerms(activeYear);
+      const dateIso = target ? isoDateForDayInWeek(target.weekStart, target.slot.day) : todayIso();
+      const term = termForDate(terms, dateIso) ?? terms[0];
+      if (!term) {
+        setRubricStates((prev) => ({ ...prev, [i]: { ...getRubricState(i), approving: false, error: t('profi.tools.exam.noTerm') } }));
+        return;
+      }
+      const rubricId = await createRubric(ownerId, schoolYearId, {
+        name: state.rubricName || session.evaluationName || session.title,
+        subjectId: subject.id,
+        criteria: state.criteria.map((c, idx) => ({
+          id: `unit-${Date.now()}-${idx}`,
+          name: c.name,
+          description: c.description,
+          weight: c.weight,
+          indicators: c.indicators,
+          ...(c.ceId ? { ceId: c.ceId } : {}),
+        })),
+      });
+      await createGradebookActivity(ownerId, schoolYearId, {
+        subjectId: subject.id,
+        termId: term.id,
+        name: session.evaluationName || session.title,
+        rubricId,
+        weight: 100,
+        scoreType: 'numeric',
+      });
+      if (target) {
+        await upsertWeeklyPlan(ownerId, schoolYearId, target.slot.id, subject.id, target.weekStart, { rubricId, evaluate: true });
+      }
+      setRubricStates((prev) => ({ ...prev, [i]: { ...getRubricState(i), approving: false, approved: true } }));
+    } catch (err) {
+      setRubricStates((prev) => ({
+        ...prev,
+        [i]: { ...getRubricState(i), approving: false, error: err instanceof Error ? err.message : String(err) },
+      }));
+    }
+  }
+
+  // Genera las rúbricas de todas las sesiones evaluables que aún no tengan
+  // una (ni estén ya aprobadas), UNA A UNA en orden — nunca en paralelo, para
+  // no lanzar varias peticiones a la vez contra la API de Gemini con la
+  // misma clave del docente (podría saturarla o toparse con límites de
+  // cuota). Por eso puede tardar varios minutos con muchas sesiones; el
+  // aviso previo y el contador de progreso dejan claro que es normal.
+  async function generateAllRubrics() {
+    if (!sessions) return;
+    const pending = evaluatedIndices.filter((i) => {
+      const s = getRubricState(i);
+      return !s.criteria && !s.approved;
+    });
+    if (pending.length === 0) return;
+    const ok = window.confirm(t('profi.tools.unit.generateAllConfirm', { count: pending.length }));
+    if (!ok) return;
+    setBulkGenerating(true);
+    setBulkProgress({ done: 0, total: pending.length });
+    for (const i of pending) {
+      // eslint-disable-next-line no-await-in-loop
+      await generateSessionRubric(i);
+      setBulkProgress((prev) => (prev ? { done: prev.done + 1, total: prev.total } : prev));
+    }
+    setBulkGenerating(false);
+    setBulkProgress(null);
+  }
 
   // Situaciones de Aprendizaje ya existentes de esta asignatura: el docente
   // puede elegir que las sesiones generadas se añadan a una SA existente en
@@ -850,7 +990,6 @@ function PlanUnitTool({ onClose }: { onClose: () => void }) {
     setError('');
     setUnitLabel('');
     setSessions(null);
-    setRubricCopyText('');
     setSavedCount(null);
     setSavedTargets(null);
     setSavedSaId(null);
@@ -891,7 +1030,8 @@ function PlanUnitTool({ onClose }: { onClose: () => void }) {
       const existingSaName = saId ? saOptions.find((s) => s.id === saId)?.name : undefined;
       setUnitLabel(existingSaName ?? result.unitLabel);
       setSessions(result.sessions);
-      setRubricCopyText(result.rubricCopyText);
+      setRubricStates({});
+      setRubricCarouselIndex(0);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -1291,16 +1431,6 @@ function PlanUnitTool({ onClose }: { onClose: () => void }) {
             ))}
           </div>
 
-          {rubricCopyText && (
-            <>
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>{t('profi.tools.unit.rubricCopyLabel')}</p>
-                <CopyButton text={rubricCopyText} />
-              </div>
-              <Textarea value={rubricCopyText} onChange={(e) => setRubricCopyText(e.target.value)} rows={6} />
-            </>
-          )}
-
           {savedCount !== null ? (
             <p className="text-xs font-medium" style={{ color: 'var(--accent-text)' }}>{t('profi.tools.unit.saved', { count: savedCount })}</p>
           ) : (
@@ -1319,23 +1449,76 @@ function PlanUnitTool({ onClose }: { onClose: () => void }) {
             </>
           )}
 
-          {savedCount !== null && savedTargets && sessions.some((s) => s.isEvaluated) && (
+          {savedCount !== null && savedTargets && evaluatedIndices.length > 0 && (
             <div className="flex flex-col gap-2 mt-1">
               <p className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>{t('profi.tools.unit.rubricsSectionTitle')}</p>
               <p className="text-xs -mt-1" style={{ color: 'var(--text-secondary)' }}>{t('profi.tools.unit.rubricsSectionHint')}</p>
-              {sessions.map((s, i) =>
-                s.isEvaluated ? (
-                  <SessionRubricPanel
-                    key={i}
-                    ownerId={ownerId}
-                    schoolYearId={schoolYearId}
-                    subject={subject!}
-                    language={language}
-                    session={s}
-                    target={savedTargets[i]}
-                    cePool={cePool}
-                  />
-                ) : null
+
+              {evaluatedIndices.length > 1 && (
+                <div className="flex flex-col gap-1.5">
+                  <Button variant="ghost" size="sm" onClick={generateAllRubrics} disabled={bulkGenerating} className="self-start">
+                    {bulkGenerating
+                      ? t('profi.tools.unit.generatingAllProgress', { done: bulkProgress?.done ?? 0, total: bulkProgress?.total ?? 0 })
+                      : t('profi.tools.unit.generateAllRubrics')}
+                  </Button>
+                  {bulkGenerating && (
+                    <div className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                      <IconRefresh size={13} className="animate-spin" />
+                      {t('profi.tools.unit.generatingAllHint')}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {evaluatedIndices.length > 1 ? (
+                (() => {
+                  const clampedIndex = Math.min(rubricCarouselIndex, evaluatedIndices.length - 1);
+                  const i = evaluatedIndices[clampedIndex];
+                  return (
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setRubricCarouselIndex((idx) => Math.max(0, idx - 1))}
+                          disabled={clampedIndex === 0}
+                          className="p-1.5 rounded-full disabled:opacity-30"
+                          style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}
+                          aria-label={t('profi.tools.unit.rubricPrev')}
+                        >
+                          <IconChevronLeft size={16} />
+                        </button>
+                        <p className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
+                          {t('profi.tools.unit.rubricOfTotal', { current: clampedIndex + 1, total: evaluatedIndices.length })}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setRubricCarouselIndex((idx) => Math.min(evaluatedIndices.length - 1, idx + 1))}
+                          disabled={clampedIndex === evaluatedIndices.length - 1}
+                          className="p-1.5 rounded-full disabled:opacity-30"
+                          style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}
+                          aria-label={t('profi.tools.unit.rubricNext')}
+                        >
+                          <IconChevronRight size={16} />
+                        </button>
+                      </div>
+                      <SessionRubricPanel
+                        session={sessions![i]}
+                        state={getRubricState(i)}
+                        onGenerate={() => generateSessionRubric(i)}
+                        onChangeCriteria={(criteria) => updateRubricCriteria(i, criteria)}
+                        onApprove={() => approveSessionRubric(i)}
+                      />
+                    </div>
+                  );
+                })()
+              ) : (
+                <SessionRubricPanel
+                  session={sessions![evaluatedIndices[0]]}
+                  state={getRubricState(evaluatedIndices[0])}
+                  onGenerate={() => generateSessionRubric(evaluatedIndices[0])}
+                  onChangeCriteria={(criteria) => updateRubricCriteria(evaluatedIndices[0], criteria)}
+                  onApprove={() => approveSessionRubric(evaluatedIndices[0])}
+                />
               )}
             </div>
           )}
@@ -1399,138 +1582,52 @@ function PlanUnitTool({ onClose }: { onClose: () => void }) {
 // método" (misma Cloud Function que el resto de la app), la deja editable, y
 // solo la persiste (rúbrica + columna en Notas + enlace en la programación
 // semanal) cuando el docente aprueba explícitamente — nunca antes.
+/**
+ * Puramente presentacional: todo el estado (criterios, generando,
+ * aprobado...) vive en PlanUnitTool (ver `rubricStates`), para poder
+ * generar todas las rúbricas en bloque y navegarlas en un carrusel sin que
+ * cada panel sea una isla de estado independiente.
+ */
 function SessionRubricPanel({
-  ownerId, schoolYearId, subject, language, session, target, cePool,
+  session, state, onGenerate, onChangeCriteria, onApprove,
 }: {
-  ownerId: string;
-  schoolYearId: string;
-  subject: Subject;
-  language: string;
   session: PlannedUnitSession;
-  target?: { weekStart: string; slot: TimetableSlot };
-  cePool: UnitCePoolItem[];
+  state: RubricGenState;
+  onGenerate: () => void;
+  onChangeCriteria: (criteria: NonNullable<RubricGenState['criteria']>) => void;
+  onApprove: () => void;
 }) {
   const { t } = useTranslation();
-  const { activeYear } = useSchoolYears();
-  const [generating, setGenerating] = useState(false);
-  const [error, setError] = useState('');
-  const [rubricName, setRubricName] = useState('');
-  const [criteria, setCriteria] = useState<Awaited<ReturnType<typeof generateRubricFromCurriculum>>['criteria'] | null>(null);
-  const [approving, setApproving] = useState(false);
-  const [approved, setApproved] = useState(false);
-
-  async function handleGenerate() {
-    setGenerating(true);
-    setError('');
-    try {
-      const relevantCe = cePool.filter((ce) => session.ceIds.includes(ce.id));
-      const result = await generateRubricFromCurriculum({
-        subjectName: subject.name,
-        courseLevel: subject.courseLevel,
-        activityDescription: [session.evaluationName, session.title, session.description].filter(Boolean).join(' — '),
-        competencies: relevantCe.length > 0 ? relevantCe : undefined,
-        language,
-      });
-      setRubricName(result.rubricName);
-      setCriteria(result.criteria);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setGenerating(false);
-    }
-  }
-
-  function updateCriterionName(i: number, name: string) {
-    setCriteria((prev) => (prev ? prev.map((c, idx) => (idx === i ? { ...c, name } : c)) : prev));
-  }
-
-  function updateIndicator(i: number, level: number, value: string) {
-    setCriteria((prev) =>
-      prev
-        ? prev.map((c, idx) => {
-            if (idx !== i) return c;
-            const indicators = [...c.indicators] as [string, string, string, string];
-            indicators[level] = value;
-            return { ...c, indicators };
-          })
-        : prev
-    );
-  }
-
-  async function handleApprove() {
-    if (!criteria) return;
-    setApproving(true);
-    setError('');
-    try {
-      if (!activeYear) {
-        setError(t('profi.tools.exam.noTerm'));
-        return;
-      }
-      const terms = getEffectiveTerms(activeYear);
-      const dateIso = target ? isoDateForDayInWeek(target.weekStart, target.slot.day) : todayIso();
-      const term = termForDate(terms, dateIso) ?? terms[0];
-      if (!term) {
-        setError(t('profi.tools.exam.noTerm'));
-        return;
-      }
-      const rubricId = await createRubric(ownerId, schoolYearId, {
-        name: rubricName || session.evaluationName || session.title,
-        subjectId: subject.id,
-        criteria: criteria.map((c, i) => ({
-          id: `unit-${Date.now()}-${i}`,
-          name: c.name,
-          description: c.description,
-          weight: c.weight,
-          indicators: c.indicators,
-          ...(c.ceId ? { ceId: c.ceId } : {}),
-        })),
-      });
-      await createGradebookActivity(ownerId, schoolYearId, {
-        subjectId: subject.id,
-        termId: term.id,
-        name: session.evaluationName || session.title,
-        rubricId,
-        weight: 100,
-        scoreType: 'numeric',
-      });
-      if (target) {
-        await upsertWeeklyPlan(ownerId, schoolYearId, target.slot.id, subject.id, target.weekStart, { rubricId, evaluate: true });
-      }
-      setApproved(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setApproving(false);
-    }
-  }
+  const { generating, error, criteria, approving, approved } = state;
 
   return (
     <div className="rounded-xl p-2.5 flex flex-col gap-2" style={{ background: 'var(--bg-input)', border: '1px solid var(--border)' }}>
       <p className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>{session.evaluationName || session.title}</p>
 
       {!criteria && !approved && (
-        <Button variant="ghost" size="sm" onClick={handleGenerate} disabled={generating} className="self-start">
-          {generating ? t('profi.tools.generating') : t('profi.tools.unit.generateRubric')}
-        </Button>
+        <div className="flex flex-col gap-1.5">
+          <Button variant="ghost" size="sm" onClick={onGenerate} disabled={generating} className="self-start">
+            {generating ? t('profi.tools.generating') : t('profi.tools.unit.generateRubric')}
+          </Button>
+          {generating && (
+            <div className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
+              <IconRefresh size={13} className="animate-spin" />
+              {t('profi.tools.unit.generatingHint')}
+            </div>
+          )}
+        </div>
       )}
 
       {error && <ErrorText message={error} />}
 
       {criteria && !approved && (
         <>
-          <div className="flex flex-col gap-2">
-            {criteria.map((c, i) => (
-              <div key={i} className="rounded-lg p-2" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
-                <Input value={c.name} onChange={(e) => updateCriterionName(i, e.target.value)} className="mb-1.5" />
-                <div className="flex flex-col gap-1">
-                  {c.indicators.map((ind, lvl) => (
-                    <Textarea key={lvl} value={ind} onChange={(e) => updateIndicator(i, lvl, e.target.value)} rows={1} />
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-          <Button size="sm" onClick={handleApprove} disabled={approving} className="self-start">
+          <RubricCriteriaEditor
+            criteria={criteria}
+            onChange={onChangeCriteria}
+            newCriterion={() => ({ name: '', description: '', weight: 0, indicators: ['', '', '', ''] as [string, string, string, string] })}
+          />
+          <Button size="sm" onClick={onApprove} disabled={approving} className="self-start">
             {approving ? t('profi.tools.exam.saving') : t('profi.tools.unit.approveRubric')}
           </Button>
         </>

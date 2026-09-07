@@ -48,6 +48,7 @@ import { Select } from '@/components/ui/Select';
 import Modal from '@/components/ui/Modal';
 import TagMultiSelect from '@/components/ui/TagMultiSelect';
 import SubjectStudentsModal from '@/components/subjects/SubjectStudentsModal';
+import RubricCriteriaEditor from '@/components/rubric/RubricCriteriaEditor';
 import { subjectColorClasses } from '@/components/ui/subjectColors';
 import { subjectDisplayName } from '@/utils/timetableDisplay';
 import { IconPlus, IconTrash, IconDownload, IconUpload, IconCheck, IconEdit, IconSparkles } from '@/components/ui/icons';
@@ -2130,17 +2131,7 @@ function RubricDetailModal({ rubric, onClose }: { rubric: Rubric; onClose: () =>
   const [criteria, setCriteria] = useState<GradingCriterion[]>(rubric.criteria);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [expandedRef, setExpandedRef] = useState<Set<string>>(new Set());
   const isEditable = !rubric.isLomloe;
-
-  function toggleRef(id: string) {
-    setExpandedRef((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
 
   const dirty = name !== rubric.name || JSON.stringify(criteria) !== JSON.stringify(rubric.criteria);
 
@@ -2156,41 +2147,6 @@ function RubricDetailModal({ rubric, onClose }: { rubric: Rubric; onClose: () =>
     }
   }
 
-  function updateCriterion(id: string, patch: Partial<GradingCriterion>) {
-    setCriteria((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)));
-  }
-
-  function updateIndicator(id: string, level: number, value: string) {
-    setCriteria((prev) =>
-      prev.map((c) => {
-        if (c.id !== id) return c;
-        const indicators = [...c.indicators] as [string, string, string, string];
-        indicators[level] = value;
-        return { ...c, indicators };
-      })
-    );
-  }
-
-  function addCriterion() {
-    setCriteria((prev) => [
-      ...prev,
-      { id: crypto.randomUUID(), name: '', description: '', weight: 0, indicators: ['', '', '', ''] },
-    ]);
-  }
-
-  function removeCriterion(id: string) {
-    setCriteria((prev) => prev.filter((c) => c.id !== id));
-  }
-
-  const LEVEL_LABELS = [
-    t('grades.level1'),
-    t('grades.level2'),
-    t('grades.level3'),
-    t('grades.level4'),
-  ];
-
-  const totalWeight = criteria.reduce((s, c) => s + (c.weight || 0), 0);
-
   return (
     <Modal open onClose={onClose} title={rubric.isLomloe ? rubric.name : t('grades.editRubric')} widthClass="max-w-3xl">
       <div className="flex flex-col gap-5">
@@ -2201,139 +2157,22 @@ function RubricDetailModal({ rubric, onClose }: { rubric: Rubric; onClose: () =>
         )}
 
         {isEditable && (
-          <>
-            <Input
-              label={t('grades.rubricName')}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-            <p className={`text-xs ${Math.abs(totalWeight - 100) > 0.01 ? 'text-rose-500' : 'text-ink-soft'}`}>
-              {t('grades.totalWeight')}: {totalWeight}% {Math.abs(totalWeight - 100) > 0.01 ? t('grades.totalWeightWarning') : ''}
-            </p>
-          </>
+          <Input
+            label={t('grades.rubricName')}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
         )}
 
-        <div className="flex flex-col gap-4">
-          {criteria.map((c) => (
-            <div key={c.id} className="border border-lav-100 rounded-2xl overflow-hidden">
-              <div className="bg-accent-light px-4 py-2.5 flex flex-col gap-2">
-                {c.ceLabel && (
-                  <span className="inline-flex items-center gap-1 self-start text-[10px] font-bold uppercase tracking-wide rounded-full px-2 py-0.5 bg-theme-card text-accent">
-                    {c.ceLabel}
-                  </span>
-                )}
-                {isEditable ? (
-                  <div className="flex items-start gap-2">
-                    <div className="flex-1 flex flex-col gap-1.5">
-                      <Input
-                        value={c.name}
-                        onChange={(e) => updateCriterion(c.id, { name: e.target.value })}
-                        placeholder={t('grades.criterionName')}
-                      />
-                      <textarea
-                        value={c.description ?? ''}
-                        onChange={(e) => updateCriterion(c.id, { description: e.target.value })}
-                        placeholder={t('grades.criterionDescriptionWithRef')}
-                        rows={2}
-                        className="w-full rounded-xl border border-lav-100 bg-theme-card px-2 py-1.5 text-xs resize-none focus:outline-none focus:ring-2 focus:ring-accent"
-                      />
-                      {c.ceReference && (
-                        <button
-                          type="button"
-                          onClick={() => toggleRef(c.id)}
-                          className="text-[10px] font-medium text-accent self-start hover:underline"
-                        >
-                          {expandedRef.has(c.id) ? 'ocultar texto oficial completo' : 'ver texto oficial completo'}
-                        </button>
-                      )}
-                      {c.ceReference && expandedRef.has(c.id) && (
-                        <p className="text-xs whitespace-pre-wrap rounded-xl px-2.5 py-2" style={{ background: 'rgba(0,0,0,0.03)', color: 'var(--text-secondary)' }}>
-                          {c.ceName && <span className="font-semibold block mb-0.5">{c.ceId ? `${c.ceId}. ` : ''}{c.ceName}</span>}
-                          {c.ceReference}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex flex-col items-end gap-1 shrink-0">
-                      <div className="flex items-center gap-1">
-                        <input
-                          type="number"
-                          min={0}
-                          max={100}
-                          value={c.weight}
-                          onChange={(e) => updateCriterion(c.id, { weight: Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)) })}
-                          className="w-16 text-center border border-lav-200 rounded-xl px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-                        />
-                        <span className="text-xs text-ink-soft">%</span>
-                      </div>
-                      <button onClick={() => removeCriterion(c.id)} className="text-ink-soft hover:text-rose-600">
-                        <IconTrash size={16} />
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-1.5">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <span className="text-sm font-semibold text-ink">{c.name}</span>
-                        {c.description && <span className="text-xs text-ink-soft ml-2">— {c.description}</span>}
-                      </div>
-                      <span className="text-xs font-semibold text-accent bg-theme-card rounded-full px-2 py-0.5">
-                        {c.weight}%
-                      </span>
-                    </div>
-                    {c.ceReference && (
-                      <button
-                        type="button"
-                        onClick={() => toggleRef(c.id)}
-                        className="text-[10px] font-medium text-accent self-start hover:underline"
-                      >
-                        {expandedRef.has(c.id) ? 'ocultar texto oficial completo' : 'ver texto oficial completo'}
-                      </button>
-                    )}
-                    {c.ceReference && expandedRef.has(c.id) && (
-                      <p className="text-xs whitespace-pre-wrap rounded-xl px-2.5 py-2" style={{ background: 'rgba(0,0,0,0.03)', color: 'var(--text-secondary)' }}>
-                        {c.ceName && <span className="font-semibold block mb-0.5">{c.ceId ? `${c.ceId}. ` : ''}{c.ceName}</span>}
-                        {c.ceReference}
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-lav-100">
-                {c.indicators.map((indicator, level) => (
-                  <div key={level} className={`p-3 ${level === 0 ? 'bg-rose-50' : level === 1 ? 'bg-butter-50' : level === 2 ? 'bg-accent-light' : 'bg-mint-50'}`}>
-                    <p className={`text-[10px] font-semibold mb-1 ${level === 0 ? 'text-rose-500' : level === 1 ? 'text-butter-600' : level === 2 ? 'text-accent' : 'text-mint-600'}`}>
-                      {LEVEL_LABELS[level]}
-                    </p>
-                    {isEditable ? (
-                      <textarea
-                        value={indicator}
-                        onChange={(e) => updateIndicator(c.id, level, e.target.value)}
-                        rows={3}
-                        placeholder={t('grades.describeLevel')}
-                        className="w-full rounded-lg border border-lav-100 bg-theme-card px-1.5 py-1 text-xs resize-none focus:outline-none focus:ring-2 focus:ring-accent"
-                      />
-                    ) : (
-                      <p className="text-xs text-ink leading-relaxed">{indicator}</p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-
-          {criteria.length === 0 && (
-            <p className="text-sm text-ink-soft">
-              {t('grades.noCriteriaYet')}
-            </p>
-          )}
-        </div>
+        <RubricCriteriaEditor
+          criteria={criteria}
+          onChange={setCriteria}
+          readOnly={!isEditable}
+          newCriterion={() => ({ id: crypto.randomUUID(), name: '', description: '', weight: 0, indicators: ['', '', '', ''] as [string, string, string, string] })}
+        />
 
         {isEditable && (
-          <div className="flex items-center justify-between flex-wrap gap-2 pt-1">
-            <Button size="sm" variant="secondary" icon={<IconPlus size={14} />} onClick={addCriterion}>
-              {t('grades.addCriterion')}
-            </Button>
+          <div className="flex items-center justify-end gap-2 pt-1">
             <Button
               disabled={saving || !dirty}
               icon={saved ? <IconCheck size={14} /> : undefined}

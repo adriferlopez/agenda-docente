@@ -1448,22 +1448,21 @@ Para cada sesión, indica:
 - "isEvaluated": true si esa sesión concreta genera una evidencia que el docente calificará (un trabajo, una entrega, la presentación del producto final...), false si es una sesión de trabajo no evaluada por sí misma.
 - "evaluationName": SOLO si "isEvaluated" es true, un nombre corto para esa evidencia evaluable (p.ej. "Entrega del guion" o "Presentación final").
 
-También propón:
-- Un nombre corto para la SA completa ("unitLabel").
-- Un texto "rubricCopyText": una rúbrica completa en texto plano/markdown ligero (lista para copiar y pegar tal cual, siempre editable por el docente) que evalúe el conjunto del producto final de la SA, con entre 3 y 5 criterios derivados de las CE trabajadas, cada uno con 4 niveles de logro (Insuficiente/Suficiente/Notable/Excelente) y su peso en %, sumando 100%. Este texto es independiente de las rúbricas estructuradas que el docente pueda generar sesión a sesión más adelante: es solo para copiar y pegar directamente.
+También propón un nombre corto para la SA completa ("unitLabel"). No hace falta ninguna rúbrica en texto libre: el docente generará y editará las rúbricas de cada sesión evaluable después, de forma estructurada, directamente en la app.
 
-Responde en ${lang}. Responde ÚNICAMENTE con un JSON válido de la forma {"unitLabel": "...", "sessions": [{"phase": "...", "title": "...", "description": "...", "ceIds": ["..."], "isEvaluated": true, "evaluationName": "..."}], "rubricCopyText": "..."}, con el array "sessions" con EXACTAMENTE ${sessionCount} elementos en orden (inicio primero, síntesis al final). Sin texto adicional ni bloques de código markdown envolviendo el JSON.`;
+Responde en ${lang}. Responde ÚNICAMENTE con un JSON válido de la forma {"unitLabel": "...", "sessions": [{"phase": "...", "title": "...", "description": "...", "ceIds": ["..."], "isEvaluated": true, "evaluationName": "..."}]}, con el array "sessions" con EXACTAMENTE ${sessionCount} elementos en orden (inicio primero, síntesis al final). Sin texto adicional ni bloques de código markdown envolviendo el JSON.`;
 
     // Sin acotar el "thinking"/maxOutputTokens (a diferencia del chat, ver
     // línea ~633), este modelo "piensa" con presupuesto dinámico/sin límite
-    // explícito antes de responder. Con un JSON tan grande (hasta 20
-    // sesiones detalladas + una rúbrica completa), eso disparaba la
-    // latencia real ("tarda mucho") y, si el pensamiento se comía casi todo
-    // el presupuesto de salida por defecto, el JSON final llegaba cortado a
-    // medias — parseJsonResponse fallaba y el docente veía un error
-    // "Internal" genérico sin que hubiera ningún problema con su clave ni
-    // con la petición en sí. MEDIUM da margen para razonar bien sin
-    // dispararse, y el techo de maxOutputTokens evita el truncado del JSON.
+    // explícito antes de responder. Con un JSON con hasta 20 sesiones
+    // detalladas, eso disparaba la latencia real ("tarda mucho") y, si el
+    // pensamiento se comía casi todo el presupuesto de salida por defecto,
+    // el JSON final llegaba cortado a medias — parseJsonResponse fallaba y
+    // el docente veía un error "Internal" genérico sin que hubiera ningún
+    // problema con su clave ni con la petición en sí. MEDIUM da margen para
+    // razonar bien sin dispararse, y el techo de maxOutputTokens evita el
+    // truncado del JSON (ya no incluye una rúbrica completa en texto, así
+    // que el margen sobra de más).
     // Nota: gemini-3.6-flash usa "thinkingLevel", no "thinkingBudget" (ver
     // también línea ~638) — con "thinkingBudget" la API devuelve 400
     // INVALID_ARGUMENT.
@@ -1472,7 +1471,7 @@ Responde en ${lang}. Responde ÚNICAMENTE con un JSON válido de la forma {"unit
       maxOutputTokens: 16384,
     });
     try {
-      const parsed = parseJsonResponse<{ unitLabel?: string; sessions?: unknown; rubricCopyText?: string }>(raw);
+      const parsed = parseJsonResponse<{ unitLabel?: string; sessions?: unknown }>(raw);
       const rawSessions = Array.isArray(parsed.sessions) ? parsed.sessions : [];
       let sessions: PlanLearningUnitSession[] = rawSessions
         .filter((s): s is Record<string, unknown> => !!s && typeof s === 'object')
@@ -1524,7 +1523,6 @@ Responde en ${lang}. Responde ÚNICAMENTE con un JSON válido de la forma {"unit
       return {
         unitLabel: typeof parsed.unitLabel === 'string' && parsed.unitLabel.trim() ? parsed.unitLabel : subject,
         sessions,
-        rubricCopyText: typeof parsed.rubricCopyText === 'string' ? parsed.rubricCopyText : '',
       };
     } catch (err) {
       if (err instanceof HttpsError) throw err;

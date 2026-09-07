@@ -31,7 +31,6 @@ export interface ProfiUnitDraft {
   saId: string;
   unitLabel: string;
   sessions: PlannedUnitSession[];
-  rubricCopyText: string;
   sessionCount: number;
   ceIds: string[];
   howToWorkByCe: Record<string, string>;

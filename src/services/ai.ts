@@ -470,12 +470,11 @@ export interface PlannedUnitSession {
 export interface PlannedLearningUnit {
   unitLabel: string;
   sessions: PlannedUnitSession[];
-  rubricCopyText: string;
 }
 
 export async function planLearningUnit(args: PlanLearningUnitArgs): Promise<PlannedLearningUnit> {
-  // Es la generación más pesada de toda la app (hasta 20 sesiones completas
-  // + rúbrica de texto), así que necesita más margen que el resto de
+  // Es la generación más pesada de toda la app (hasta 20 sesiones completas),
+  // así que necesita más margen que el resto de
   // llamadas a Profi: el timeout del cliente debe ser mayor que el
   // `timeoutSeconds` del servidor (ver functions/src/index.ts) para que sea
   // siempre el servidor quien corte primero con un error legible, en vez de
