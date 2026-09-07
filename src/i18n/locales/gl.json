@@ -273,7 +273,10 @@
       "dateStart": "Data de inicio",
       "dateEnd": "Data de fin (opcional)",
       "noSlotsInRange": "Non hai clases programadas nas datas seleccionadas.",
-      "summary": "Marcaranse {{count}} sesións."
+      "summary": "Marcaranse {{count}} sesións.",
+      "chooseSlots": "Escolle as sesións concretas nas que non estarás:",
+      "selectAll": "Marcar todas",
+      "selectNone": "Desmarcar todas"
     },
     "holidays": {
       "button": "Festivos do centro",
@@ -286,7 +289,8 @@
       "labelPlaceholder": "Ex. Festa local",
       "none": "Non hai festivos engadidos.",
       "hideSubjects": "Ocultar materias en festivos",
-      "hideSubjectsHelp": "Na vista semanal, non mostra as tarxetas de materia dos días marcados como festivo do centro. A vista mensual nunca mostra materias: só festivos e reunións."
+      "hideSubjectsHelp": "Na vista semanal, non mostra as tarxetas de materia dos días marcados como festivo do centro. A vista mensual nunca mostra materias: só festivos e reunións.",
+      "editingNotice": "Editando este festivo. Cambia a data, o nome ou a cor e garda os cambios."
     },
     "meetings": {
       "noTime": "Sen hora"
@@ -357,6 +361,13 @@
     "saCollectFromSessions": "Recoller das sesións",
     "saActionError": "Non se puido xerar con Profi. Téntao de novo nuns segundos.",
     "saCeMatrix": "Contribución ás competencias específicas",
+    "copySaToGroup": "Copiar SA a outro grupo",
+    "copySaToGroupHelp": "Copiarase esta Situación de Aprendizaxe enteira ({{count}} sesións) aos grupos que elixas, repartíndoa desde a data de inicio sobre as horas propias de cada grupo.",
+    "copySaToGroupNone": "Non se detectou ningún grupo paralelo para esta materia.",
+    "copySaToGroupStartDate": "Data de inicio",
+    "copySaToGroupStartDateHint": "Comezará na semana do {{week}}.",
+    "copySaToGroupConfirm": "Copiar SA",
+    "copySaToGroupSuccess": "SA copiada",
     "cicle1": "1º ciclo",
     "cicle2": "2º ciclo",
     "cicle3": "3º ciclo"
@@ -434,6 +445,9 @@
   },
   "common": {
     "save": "Gardar",
+    "saveChanges": "Gardar os cambios",
+    "aiQuotaError": "A túa clave da API de Gemini acadou o seu límite de uso gratuíto (por minuto ou por día). Isto é independente de usar Gemini desde a súa web ou app normal, que ten unha cota distinta. Espera uns minutos (ou ata mañá se é o límite diario) e vólveo intentar, ou revisa a túa cota en aistudio.google.com/apikey.",
+    "aiOverloadError": "O modelo de IA está saturado agora mesmo por moita demanda. Espera uns segundos e vólveo intentar.",
     "cancel": "Cancelar",
     "delete": "Eliminar",
     "edit": "Editar",

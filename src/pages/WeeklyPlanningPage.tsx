@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { getDay, parseISO } from 'date-fns';
+import { getDay, parseISO, format as formatDate } from 'date-fns';
 import { useTranslation } from 'react-i18next';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/firebase/config';
@@ -18,13 +18,13 @@ import {
   weeklyPlanContentFrom,
   EMPTY_WEEKLY_PLAN_CONTENT,
 } from '@/firebase/weeklyPlans';
-import { subscribeSchoolHolidays, addSchoolHoliday, deleteSchoolHoliday } from '@/firebase/schoolHolidays';
+import { subscribeSchoolHolidays, addSchoolHoliday, deleteSchoolHoliday, updateSchoolHoliday } from '@/firebase/schoolHolidays';
 import { subscribeMeetings } from '@/firebase/meetings';
 import { subscribeMeetingFolders } from '@/firebase/meetingFolders';
 import MeetingEditorModal from '@/components/meetings/MeetingEditorModal';
 import { subscribeRubrics, createRubric } from '@/firebase/grades';
 import { subscribeLearningSituations, createLearningSituation } from '@/firebase/learningSituations';
-import { generateWeeklySuggestions, generateRubricFromCurriculum } from '@/services/ai';
+import { generateWeeklySuggestions, generateRubricFromCurriculum, classifyAiError } from '@/services/ai';
 import { getCurriculumForSubject } from '@/data/curriculum';
 import { allCriteris, extractCriteriCodes, guessAreaName } from '@/data/curriculum/types';
 import type { Etapa, Comunitat } from '@/data/curriculum/types';
@@ -40,6 +40,7 @@ import {
   formatMonthLabel,
   getMonthCalendarDays,
   isoDateRange,
+  getDateFnsLocale,
 } from '@/utils/dates';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
@@ -545,6 +546,7 @@ export default function WeeklyPlanningPage() {
       {showExcursionModal && (
         <ExcursionModal
           slots={slots}
+          subjectById={subjectById}
           ownerId={user!.uid}
           schoolYearId={activeYear.id}
           onClose={() => setShowExcursionModal(false)}
@@ -622,17 +624,43 @@ function HolidaysModal({ holidays, ownerId, schoolYearId, onClose }: {
   const [label, setLabel] = useState('');
   const [color, setColor] = useState<PastelFolderColor | undefined>(undefined);
   const [saving, setSaving] = useState(false);
+  // Festivo que se está editando (id del documento). Al editar, el festivo
+  // es un único día (un documento = una fecha), así que se reutiliza el
+  // mismo formulario pero ocultando el campo de fecha de fin y cambiando el
+  // botón de "Añadir" a "Guardar cambios".
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  function startEdit(h: SchoolHoliday) {
+    setEditingId(h.id);
+    setStartDate(h.date);
+    setEndDate('');
+    setLabel(h.label ?? '');
+    setColor(h.color);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setStartDate('');
+    setEndDate('');
+    setLabel('');
+    setColor(undefined);
+  }
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
     if (!startDate) return;
     setSaving(true);
     try {
-      const dates = isoDateRange(startDate, endDate || startDate);
-      await Promise.all(dates.map((d) => addSchoolHoliday(ownerId, schoolYearId, d, label.trim() || undefined, color)));
-      setStartDate('');
-      setEndDate('');
-      setLabel('');
+      if (editingId) {
+        await updateSchoolHoliday(editingId, { date: startDate, label: label.trim() || null, color: color ?? null });
+        cancelEdit();
+      } else {
+        const dates = isoDateRange(startDate, endDate || startDate);
+        await Promise.all(dates.map((d) => addSchoolHoliday(ownerId, schoolYearId, d, label.trim() || undefined, color)));
+        setStartDate('');
+        setEndDate('');
+        setLabel('');
+      }
     } finally {
       setSaving(false);
     }
@@ -648,14 +676,28 @@ function HolidaysModal({ holidays, ownerId, schoolYearId, onClose }: {
             type="date"> (que no se dejan encoger por debajo de su ancho
             nativo) terminaban invadiéndose entre sí. Aquí cada campo tiene
             siempre su propia fila/celda completa. */}
+        {editingId && (
+          <p className="text-xs font-medium" style={{ color: 'var(--accent)' }}>{t('weekly.holidays.editingNotice')}</p>
+        )}
         <form onSubmit={handleAdd} className="flex flex-col gap-2">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <Input type="date" label={t('weekly.holidays.dateStart')} value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
-            <Input type="date" label={t('weekly.holidays.dateEnd')} value={endDate} min={startDate || undefined} onChange={(e) => setEndDate(e.target.value)} />
+            {!editingId && (
+              <Input type="date" label={t('weekly.holidays.dateEnd')} value={endDate} min={startDate || undefined} onChange={(e) => setEndDate(e.target.value)} />
+            )}
           </div>
           <Input label={t('weekly.holidays.label')} placeholder={t('weekly.holidays.labelPlaceholder')} value={label} onChange={(e) => setLabel(e.target.value)} />
           <ColorSwatchPicker value={color} onChange={setColor} />
-          <Button type="submit" size="sm" disabled={!startDate || saving} className="self-start">{t('common.add')}</Button>
+          <div className="flex gap-2">
+            <Button type="submit" size="sm" disabled={!startDate || saving} className="self-start">
+              {editingId ? t('common.saveChanges') : t('common.add')}
+            </Button>
+            {editingId && (
+              <Button type="button" variant="ghost" size="sm" onClick={cancelEdit} className="self-start">
+                {t('common.cancel')}
+              </Button>
+            )}
+          </div>
         </form>
 
         {holidays.length === 0 ? (
@@ -671,13 +713,25 @@ function HolidaysModal({ holidays, ownerId, schoolYearId, onClose }: {
                     {h.label && <p className="text-xs text-ink-soft">{h.label}</p>}
                   </div>
                 </div>
-                <button
-                  onClick={() => deleteSchoolHoliday(h.id)}
-                  className="text-ink-soft hover:text-rose-600 p-1"
-                  aria-label={t('common.delete')}
-                >
-                  <IconTrash size={14} />
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => startEdit(h)}
+                    className="text-ink-soft hover:text-accent p-1"
+                    aria-label={t('common.edit')}
+                  >
+                    <IconEdit size={14} />
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (editingId === h.id) cancelEdit();
+                      deleteSchoolHoliday(h.id);
+                    }}
+                    className="text-ink-soft hover:text-rose-600 p-1"
+                    aria-label={t('common.delete')}
+                  >
+                    <IconTrash size={14} />
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -833,19 +887,27 @@ function DayStatusModal({ day, weekStartDate, slotsForDay, singleSlot, initialSt
 // recorriendo cada fecha del rango y resolviendo, si el rango cruza más de
 // una semana, la semana (lunes ISO) a la que pertenece cada una, ya que las
 // programaciones semanales se guardan un documento por semana.
-function ExcursionModal({ slots, ownerId, schoolYearId, onClose }: {
+function ExcursionModal({ slots, subjectById, ownerId, schoolYearId, onClose }: {
   slots: TimetableSlot[];
+  subjectById: Map<string, Subject>;
   ownerId: string;
   schoolYearId: string;
   onClose: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [type, setType] = useState<DayStatusType>('outing');
   const [note, setNote] = useState('');
   const [color, setColor] = useState<PastelFolderColor | undefined>(undefined);
   const [saving, setSaving] = useState(false);
+  // Franjas que el docente ha desmarcado a mano (p.ej. una excursión que
+  // empieza más tarde, o una clase concreta en medio del día en la que sí
+  // estará presente). Por defecto se marcan TODAS las franjas del rango; el
+  // docente puede desmarcar solo las que necesite sin tener que elegir día a
+  // día. Se identifican por `${weekStartDate}_${slot.id}`, igual que el id
+  // determinista de weeklyPlans.
+  const [excludedKeys, setExcludedKeys] = useState<Set<string>>(new Set());
 
   const slotsByWeekday = useMemo(() => {
     const m = new Map<WeekDay, SubjectSlot[]>();
@@ -854,6 +916,7 @@ function ExcursionModal({ slots, ownerId, schoolYearId, onClose }: {
       list.push(s);
       m.set(s.day, list);
     });
+    m.forEach((list) => list.sort((a, b) => a.startTime.localeCompare(b.startTime)));
     return m;
   }, [slots]);
 
@@ -862,20 +925,50 @@ function ExcursionModal({ slots, ownerId, schoolYearId, onClose }: {
   // a la que pertenece esa fecha y las franjas de asignatura de ese día de
   // la semana — un mismo par (semana, franja) identifica de forma única el
   // documento de programación semanal a marcar.
-  const targets = useMemo(() => {
-    if (!startDate) return [] as { weekStartDate: string; slot: SubjectSlot }[];
+  const allTargets = useMemo(() => {
+    if (!startDate) return [] as { dateIso: string; weekStartDate: string; slot: SubjectSlot }[];
     const dates = isoDateRange(startDate, endDate || startDate);
-    const out: { weekStartDate: string; slot: SubjectSlot }[] = [];
+    const out: { dateIso: string; weekStartDate: string; slot: SubjectSlot }[] = [];
     dates.forEach((iso) => {
       const date = parseISO(iso);
       const jsDay = getDay(date); // 0=Dom..6=Sáb
       if (jsDay < 1 || jsDay > 5) return;
       const weekday = (jsDay - 1) as WeekDay;
       const weekStartDate = getWeekStart(date);
-      (slotsByWeekday.get(weekday) ?? []).forEach((slot) => out.push({ weekStartDate, slot }));
+      (slotsByWeekday.get(weekday) ?? []).forEach((slot) => out.push({ dateIso: iso, weekStartDate, slot }));
     });
     return out;
   }, [startDate, endDate, slotsByWeekday]);
+
+  function targetKey(weekStartDate: string, slotId: string): string {
+    return `${weekStartDate}_${slotId}`;
+  }
+
+  // Agrupadas por fecha, para pintar un bloque de checkboxes por día cuando
+  // el rango abarca varios días.
+  const targetsByDate = useMemo(() => {
+    const m = new Map<string, { dateIso: string; weekStartDate: string; slot: SubjectSlot }[]>();
+    allTargets.forEach((t) => {
+      const list = m.get(t.dateIso) ?? [];
+      list.push(t);
+      m.set(t.dateIso, list);
+    });
+    return [...m.entries()].sort(([a], [b]) => a.localeCompare(b));
+  }, [allTargets]);
+
+  const targets = useMemo(
+    () => allTargets.filter((t) => !excludedKeys.has(targetKey(t.weekStartDate, t.slot.id))),
+    [allTargets, excludedKeys]
+  );
+
+  function toggleTarget(weekStartDate: string, slotId: string) {
+    const key = targetKey(weekStartDate, slotId);
+    setExcludedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
 
   async function apply() {
     if (targets.length === 0) return;
@@ -938,6 +1031,56 @@ function ExcursionModal({ slots, ownerId, schoolYearId, onClose }: {
             onChange={(e) => setEndDate(e.target.value)}
           />
         </div>
+
+        {targetsByDate.length > 0 && (
+          <div className="flex flex-col gap-2 rounded-lg border p-2" style={{ borderColor: 'var(--border)' }}>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
+                {t('weekly.excursions.chooseSlots')}
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className="text-xs underline"
+                  style={{ color: 'var(--accent)' }}
+                  onClick={() => setExcludedKeys(new Set())}
+                >
+                  {t('weekly.excursions.selectAll')}
+                </button>
+                <button
+                  type="button"
+                  className="text-xs underline"
+                  style={{ color: 'var(--accent)' }}
+                  onClick={() => setExcludedKeys(new Set(allTargets.map((tg) => targetKey(tg.weekStartDate, tg.slot.id))))}
+                >
+                  {t('weekly.excursions.selectNone')}
+                </button>
+              </div>
+            </div>
+            <div className="flex flex-col gap-3 max-h-48 overflow-y-auto pr-1">
+              {targetsByDate.map(([dateIso, list]) => (
+                <div key={dateIso} className="flex flex-col gap-1">
+                  {targetsByDate.length > 1 && (
+                    <p className="text-xs font-semibold capitalize" style={{ color: 'var(--text-primary)' }}>
+                      {formatDate(parseISO(dateIso), 'EEEE d MMM', { locale: getDateFnsLocale(i18n.language) })}
+                    </p>
+                  )}
+                  {list.map(({ weekStartDate, slot }) => {
+                    const key = targetKey(weekStartDate, slot.id);
+                    const checked = !excludedKeys.has(key);
+                    const subject = subjectById.get(slot.subjectId);
+                    return (
+                      <label key={key} className="flex items-center gap-2 text-sm cursor-pointer" style={{ color: 'var(--text-primary)' }}>
+                        <input type="checkbox" checked={checked} onChange={() => toggleTarget(weekStartDate, slot.id)} />
+                        <span>{slot.startTime}–{slot.endTime} · {subject?.name ?? '—'}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="flex flex-col gap-2">
           {SELECTABLE_DAY_STATUS_TYPES.map((opt) => (
@@ -1881,8 +2024,11 @@ function PlanEditorModal({ slot, subject, plan, allRubrics, allSubjects, allSlot
       setRubricGenerated(true);
       setTimeout(() => setRubricGenerated(false), 3000);
     } catch (err) {
+      const kind = classifyAiError(err);
       setRubricGenError(
-        err instanceof Error ? err.message : t('weekly.rubricGenError')
+        kind === 'quota' ? t('common.aiQuotaError')
+          : kind === 'overloaded' ? t('common.aiOverloadError')
+          : err instanceof Error ? err.message : t('weekly.rubricGenError')
       );
     } finally {
       setGeneratingRubric(false);
@@ -1940,9 +2086,12 @@ function PlanEditorModal({ slot, subject, plan, allRubrics, allSubjects, allSlot
     if (!plan) return;
     if (!window.confirm(t('weekly.deleteConfirm'))) return;
     setDeleting(true);
+    setSaveError('');
     try {
       await deleteWeeklyPlan(plan.id);
       onClose();
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : t('common.error'));
     } finally {
       setDeleting(false);
     }
@@ -1951,6 +2100,7 @@ function PlanEditorModal({ slot, subject, plan, allRubrics, allSubjects, allSlot
   async function handleGenerateSuggestions() {
     if (!subject) return;
     setGenerating(true);
+    setSaveError('');
     try {
       const suggestions = await generateWeeklySuggestions({
         subjectName: subject.name,
@@ -1962,6 +2112,13 @@ function PlanEditorModal({ slot, subject, plan, allRubrics, allSubjects, allSlot
       });
       setAiSuggestions(suggestions);
       await updateWeeklyPlanField(weeklyPlanId(slot.id, weekStart), { aiSuggestions: suggestions, status: 'evaluated' });
+    } catch (err) {
+      const kind = classifyAiError(err);
+      setSaveError(
+        kind === 'quota' ? t('common.aiQuotaError')
+          : kind === 'overloaded' ? t('common.aiOverloadError')
+          : t('common.error')
+      );
     } finally {
       setGenerating(false);
     }

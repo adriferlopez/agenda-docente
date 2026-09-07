@@ -13,6 +13,7 @@ import { getEffectiveEtapas } from '@/types';
 import {
   generateGradeBandPhrases,
   matchCriteriaToCompetencies,
+  classifyAiError,
   type PriorityCe,
   type MatchCriteriaCriterion,
   type CommentLength,
@@ -476,7 +477,12 @@ function GradeTemplateEditorModal({
       }
       await refreshEvaluatedCriteria();
     } catch (err) {
-      setDetectError(err instanceof Error ? err.message : String(err));
+      const kind = classifyAiError(err);
+      setDetectError(
+        kind === 'quota' ? t('common.aiQuotaError')
+          : kind === 'overloaded' ? t('common.aiOverloadError')
+          : err instanceof Error ? err.message : String(err)
+      );
     } finally {
       setDetecting(false);
     }
@@ -500,7 +506,12 @@ function GradeTemplateEditorModal({
       });
       setBands((prev) => prev.map((b, i) => ({ ...b, text: texts[i] ?? b.text })));
     } catch (err) {
-      setProfiError(err instanceof Error ? err.message : String(err));
+      const kind = classifyAiError(err);
+      setProfiError(
+        kind === 'quota' ? t('common.aiQuotaError')
+          : kind === 'overloaded' ? t('common.aiOverloadError')
+          : err instanceof Error ? err.message : String(err)
+      );
     } finally {
       setProfiLoading(false);
     }

@@ -50,36 +50,46 @@ export async function getUserGeminiClient(uid: string): Promise<GoogleGenAI> {
 }
 
 /**
- * Detecta los errores transitorios de sobrecarga de la API de Gemini (503
- * "the model is overloaded" / 429 de cuota puntual), que son habituales en
- * los modelos gratuitos en horas de mucho uso y casi siempre desaparecen
- * reintentando a los pocos segundos — a diferencia de un error real de
- * configuración (clave inválida, prompt demasiado largo, etc.).
+ * Distingue dos causas de error MUY distintas que la API de Gemini devuelve
+ * ambas como 429, y que antes se trataban como si fueran la misma cosa
+ * ("el modelo está saturado"):
+ *  - 'overloaded' (503, o 429 con motivo genérico de disponibilidad): el
+ *    modelo está sobrecargado para todo el mundo en ese momento. Reintentar
+ *    a los pocos segundos casi siempre funciona.
+ *  - 'quota': la CLAVE PROPIA del docente (la que configuró en Ajustes) ha
+ *    agotado su cuota gratuita de la API (límite por minuto o por día del
+ *    nivel gratuito de Gemini). Esto es independiente de usar Gemini desde
+ *    su web/app de chat (esa es una cuota de producto totalmente distinta),
+ *    y reintentar en el momento no sirve de nada si es el límite diario.
+ * Cualquier otro error (clave inválida, prompt demasiado largo, etc.) no
+ * entra en ninguna de las dos categorías y se propaga tal cual.
  */
-function isOverloadedError(err: unknown): boolean {
-  if (err instanceof ApiError) {
-    return err.status === 503 || err.status === 429;
-  }
+function classifyTransientError(err: unknown): 'overloaded' | 'quota' | null {
+  const status = err instanceof ApiError ? err.status : undefined;
   const msg = err instanceof Error ? err.message.toLowerCase() : '';
-  return /overloaded|unavailable|resource_exhausted|alta demanda|high demand|\b429\b|\b503\b/.test(msg);
+  if (status === 429 || /resource_exhausted|quota|rate limit/.test(msg)) return 'quota';
+  if (status === 503 || /overloaded|unavailable|alta demanda|high demand|\b503\b/.test(msg)) return 'overloaded';
+  return null;
 }
 
-/** Reintenta una llamada a Gemini un par de veces (con espera creciente) si el error es de sobrecarga transitoria; cualquier otro error se propaga de inmediato. */
+/** Reintenta una llamada a Gemini un par de veces (con espera creciente) si el error es transitorio (sobrecarga o cuota); cualquier otro error se propaga de inmediato. */
 async function withOverloadRetry<T>(fn: () => Promise<T>): Promise<T> {
   const delaysMs = [1000, 3000];
   for (let attempt = 0; ; attempt++) {
     try {
       return await fn();
     } catch (err) {
-      if (attempt >= delaysMs.length || !isOverloadedError(err)) throw err;
+      if (attempt >= delaysMs.length || !classifyTransientError(err)) throw err;
       await new Promise((resolve) => setTimeout(resolve, delaysMs[attempt]));
     }
   }
 }
 
-/** Mensaje amigable (evita reenviar al docente el texto crudo en inglés de la API) cuando la sobrecarga persiste tras los reintentos. */
+/** Mensajes amigables (evitan reenviar al docente el texto crudo en inglés de la API) cuando el error transitorio persiste tras los reintentos. */
 const OVERLOAD_MESSAGE =
   'El modelo de IA está saturado ahora mismo por mucha demanda. Espera unos segundos y vuelve a intentarlo.';
+const QUOTA_MESSAGE =
+  'Tu clave de la API de Gemini ha alcanzado su límite de uso gratuito (por minuto o por día). Esto es independiente de usar Gemini desde su web o app normal, que tiene una cuota distinta. Espera unos minutos (o hasta mañana si es el límite diario) y vuelve a intentarlo, o revisa tu cuota en https://aistudio.google.com/apikey.';
 
 /**
  * `config` es opcional y no cambia el comportamiento por defecto de ninguna
@@ -105,7 +115,9 @@ export async function generateText(uid: string, prompt: string, config?: Generat
     );
     return (response.text ?? '').trim();
   } catch (err) {
-    if (isOverloadedError(err)) throw new HttpsError('unavailable', OVERLOAD_MESSAGE);
+    const kind = classifyTransientError(err);
+    if (kind === 'quota') throw new HttpsError('resource-exhausted', QUOTA_MESSAGE);
+    if (kind === 'overloaded') throw new HttpsError('unavailable', OVERLOAD_MESSAGE);
     const message = err instanceof Error ? err.message : 'Error desconocido';
     throw new HttpsError('internal', `Error al llamar a la API de Gemini: ${message}`);
   }
@@ -138,7 +150,9 @@ export async function generateTextWithPdf(uid: string, prompt: string, pdfBase64
     );
     return (response.text ?? '').trim();
   } catch (err) {
-    if (isOverloadedError(err)) throw new HttpsError('unavailable', OVERLOAD_MESSAGE);
+    const kind = classifyTransientError(err);
+    if (kind === 'quota') throw new HttpsError('resource-exhausted', QUOTA_MESSAGE);
+    if (kind === 'overloaded') throw new HttpsError('unavailable', OVERLOAD_MESSAGE);
     const message = err instanceof Error ? err.message : 'Error desconocido';
     throw new HttpsError('internal', `Error al llamar a la API de Gemini: ${message}`);
   }

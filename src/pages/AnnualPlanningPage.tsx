@@ -1,22 +1,27 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { parseISO } from 'date-fns';
 import { pdf } from '@react-pdf/renderer';
 import { useAuthStore } from '@/store/authStore';
 import { useSchoolYears } from '@/hooks/useSchoolYears';
 import { subscribeSubjects } from '@/firebase/subjects';
+import { subscribeTimetable } from '@/firebase/timetable';
 import { subscribeRubrics } from '@/firebase/grades';
+import { createGradebookActivity } from '@/firebase/gradebookActivities';
 import { updatePlanCurriculumAndObjectives } from '@/firebase/annualPlan';
-import { subscribeAllWeeklyPlans, deleteWeeklyPlan } from '@/firebase/weeklyPlans';
+import { subscribeAllWeeklyPlans, deleteWeeklyPlan, upsertWeeklyPlan } from '@/firebase/weeklyPlans';
 import {
   subscribeLearningSituations,
   migrateLegacySaLabels,
   updateLearningSituation,
+  createLearningSituation,
 } from '@/firebase/learningSituations';
-import { generateActivityObjectives, matchCurriculumItems, generateSaObjectives, generateSaMethodologyResources } from '@/services/ai';
+import { generateActivityObjectives, matchCurriculumItems, generateSaObjectives, generateSaMethodologyResources, classifyAiError } from '@/services/ai';
 import { getCurriculumForSubject, COURSE_LEVELS_BY_ETAPA } from '@/data/curriculum';
 import type { Etapa, Comunitat, EtapaCurriculum } from '@/data/curriculum/types';
 import { getEffectiveTerms, termForDate } from '@/utils/terms';
 import { driveImagePreviewUrl } from '@/utils/drive';
+import { getWeekStart, shiftWeek, isoDateForDayInWeek, formatWeekLabel } from '@/utils/dates';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import { Select } from '@/components/ui/Select';
@@ -26,8 +31,9 @@ import TagMultiSelect from '@/components/ui/TagMultiSelect';
 import { subjectColorClasses } from '@/components/ui/subjectColors';
 import { subjectDisplayName } from '@/utils/timetableDisplay';
 import AnnualPlanPdf from '@/components/annual/AnnualPlanPdf';
-import { IconSparkles, IconDownload, IconImage, IconTrash, IconEdit, IconRefresh } from '@/components/ui/icons';
-import type { Subject, WeeklyPlan, Rubric, LearningSituation } from '@/types';
+import { IconSparkles, IconDownload, IconImage, IconTrash, IconEdit, IconRefresh, IconCheck } from '@/components/ui/icons';
+import { IconCopy } from '@/components/ui/icons-extra';
+import type { Subject, WeeklyPlan, Rubric, LearningSituation, TimetableSlot } from '@/types';
 import { getEffectiveEtapas } from '@/types';
 
 /** Un "saber" (contenido) del currículum, en el formato que necesita el
@@ -101,12 +107,14 @@ export default function AnnualPlanningPage() {
   const [plans, setPlans] = useState<WeeklyPlan[] | null>(null);
   const [rubrics, setRubrics] = useState<Rubric[]>([]);
   const [situations, setSituations] = useState<LearningSituation[]>([]);
+  const [allSlots, setAllSlots] = useState<TimetableSlot[]>([]);
   const [generatingId, setGeneratingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>('');
   const [editingPlan, setEditingPlan] = useState<WeeklyPlan | null>(null);
+  const [copySaTarget, setCopySaTarget] = useState<{ situation: LearningSituation; plans: WeeklyPlan[]; subject: Subject } | null>(null);
   // Antes handleGenerateSaObjectives/handleGenerateSaFields solo tenían
   // try{...}finally{...}: si Gemini fallaba (cuota, red, API key inválida...)
   // el error se perdía en silencio y el botón "Generar con Profi" del panel
@@ -177,6 +185,11 @@ export default function AnnualPlanningPage() {
   }, [user, activeYear]);
 
   useEffect(() => {
+    if (!user || !activeYear) return;
+    return subscribeTimetable(user.uid, activeYear.id, setAllSlots);
+  }, [user, activeYear]);
+
+  useEffect(() => {
     if (subjects.length === 0) return;
     if (!selectedSubjectId || !subjects.some((s) => s.id === selectedSubjectId)) {
       setSelectedSubjectId(subjects[0].id);
@@ -242,6 +255,7 @@ export default function AnnualPlanningPage() {
     const subject = subjectById.get(plan.subjectId);
     if (!subject) return;
     setGeneratingId(plan.id + '-obj');
+    setSaActionError(null);
     try {
       const objectives = await generateActivityObjectives({
         subjectName: subject.name,
@@ -252,6 +266,14 @@ export default function AnnualPlanningPage() {
       });
       await updatePlanCurriculumAndObjectives(plan.id, { aiObjectives: objectives });
       setPlans((prev) => prev?.map((p) => (p.id === plan.id ? { ...p, aiObjectives: objectives } : p)) ?? null);
+    } catch (err) {
+      console.error('Error generando objetivos de actividad con Profi:', err);
+      const kind = classifyAiError(err);
+      setSaActionError(
+        kind === 'quota' ? t('common.aiQuotaError')
+          : kind === 'overloaded' ? t('common.aiOverloadError')
+          : t('annual.saActionError')
+      );
     } finally {
       setGeneratingId(null);
     }
@@ -262,6 +284,7 @@ export default function AnnualPlanningPage() {
     const items = curriculumBySubject.get(plan.subjectId) ?? [];
     if (!subject || items.length === 0) return;
     setGeneratingId(plan.id + '-curr');
+    setSaActionError(null);
     try {
       const ids = await matchCurriculumItems({
         subjectName: subject.name,
@@ -273,6 +296,14 @@ export default function AnnualPlanningPage() {
       });
       await updatePlanCurriculumAndObjectives(plan.id, { curriculumItemIds: ids });
       setPlans((prev) => prev?.map((p) => (p.id === plan.id ? { ...p, curriculumItemIds: ids } : p)) ?? null);
+    } catch (err) {
+      console.error('Error emparejando currículum con Profi:', err);
+      const kind = classifyAiError(err);
+      setSaActionError(
+        kind === 'quota' ? t('common.aiQuotaError')
+          : kind === 'overloaded' ? t('common.aiOverloadError')
+          : t('annual.saActionError')
+      );
     } finally {
       setGeneratingId(null);
     }
@@ -281,8 +312,12 @@ export default function AnnualPlanningPage() {
   async function handleDelete(plan: WeeklyPlan) {
     if (!window.confirm(t('weekly.deleteConfirm'))) return;
     setDeletingId(plan.id);
+    setSaActionError(null);
     try {
       await deleteWeeklyPlan(plan.id);
+    } catch (err) {
+      console.error('Error eliminando actividad:', err);
+      setSaActionError(t('common.error'));
     } finally {
       setDeletingId(null);
     }
@@ -305,7 +340,12 @@ export default function AnnualPlanningPage() {
       await updateLearningSituation(situation.id, { objectives });
     } catch (err) {
       console.error('Error generando los objetivos de la SA con Profi:', err);
-      setSaActionError(t('annual.saActionError'));
+      const kind = classifyAiError(err);
+      setSaActionError(
+        kind === 'quota' ? t('common.aiQuotaError')
+          : kind === 'overloaded' ? t('common.aiOverloadError')
+          : t('annual.saActionError')
+      );
     } finally {
       setGeneratingId(null);
     }
@@ -327,7 +367,12 @@ export default function AnnualPlanningPage() {
       await updateLearningSituation(situation.id, { methodology, resources });
     } catch (err) {
       console.error('Error generando metodología/recursos de la SA con Profi:', err);
-      setSaActionError(t('annual.saActionError'));
+      const kind = classifyAiError(err);
+      setSaActionError(
+        kind === 'quota' ? t('common.aiQuotaError')
+          : kind === 'overloaded' ? t('common.aiOverloadError')
+          : t('annual.saActionError')
+      );
     } finally {
       setGeneratingId(null);
     }
@@ -581,6 +626,7 @@ export default function AnnualPlanningPage() {
                   onGenerateObjectives={() => handleGenerateSaObjectives(situation, group.plans)}
                   onGenerateFields={() => handleGenerateSaFields(situation, group.plans)}
                   onToggleCe={(activityId, ceId, autoSet) => handleToggleCe(situation, activityId, ceId, autoSet)}
+                  onCopyToGroup={subject ? () => setCopySaTarget({ situation, plans: group.plans, subject }) : undefined}
                 />
                 {activityCards}
               </div>
@@ -601,6 +647,20 @@ export default function AnnualPlanningPage() {
           }}
         />
       )}
+
+      {copySaTarget && user && activeYear && (
+        <CopySaToGroupModal
+          situation={copySaTarget.situation}
+          plans={copySaTarget.plans}
+          subject={copySaTarget.subject}
+          allSubjects={subjects}
+          allSlots={allSlots}
+          effectiveTerms={effectiveTerms}
+          ownerId={user.uid}
+          schoolYearId={activeYear.id}
+          onClose={() => setCopySaTarget(null)}
+        />
+      )}
     </div>
   );
 }
@@ -612,7 +672,7 @@ export default function AnnualPlanningPage() {
 // diversidad) y la matriz de contribución a competencias específicas.
 // -----------------------------------------------------------------------
 function SaPanel({
-  situation, plans, subject, curriculumById, rubricsById, effectiveTerms, generatingId, onGenerateObjectives, onGenerateFields, onToggleCe,
+  situation, plans, subject, curriculumById, rubricsById, effectiveTerms, generatingId, onGenerateObjectives, onGenerateFields, onToggleCe, onCopyToGroup,
 }: {
   situation: LearningSituation;
   plans: WeeklyPlan[];
@@ -624,6 +684,7 @@ function SaPanel({
   onGenerateObjectives: () => void;
   onGenerateFields: () => void;
   onToggleCe: (activityId: string, ceId: string, autoSet: Set<string>) => void;
+  onCopyToGroup?: () => void;
 }) {
   const { t } = useTranslation();
 
@@ -652,7 +713,14 @@ function SaPanel({
   const allCe = useMemo(() => {
     const seen = new Map<string, ActivityCe>();
     ceByActivity.forEach((list) => list.forEach((ce) => seen.set(ce.id, ce)));
-    return [...seen.values()];
+    // Orden numérico por CE (CE1, CE2, ... CEn), no por orden de aparición
+    // en las actividades. El id sigue siempre el formato "CE<número>".
+    return [...seen.values()].sort((a, b) => {
+      const numA = parseInt(a.id.replace(/\D/g, ''), 10);
+      const numB = parseInt(b.id.replace(/\D/g, ''), 10);
+      if (Number.isNaN(numA) || Number.isNaN(numB)) return a.id.localeCompare(b.id);
+      return numA - numB;
+    });
   }, [ceByActivity]);
 
   const [collecting, setCollecting] = useState<'sabers' | 'criteria' | null>(null);
@@ -700,7 +768,14 @@ function SaPanel({
 
   return (
     <Card className="flex flex-col gap-3 border-2" style={{ borderColor: 'var(--border-accent, var(--border))' }}>
-      <p className="font-display text-lg text-accent">{situation.name}</p>
+      <div className="flex items-center gap-2">
+        <p className="font-display text-lg text-accent flex-1">{situation.name}</p>
+        {onCopyToGroup && (
+          <Button size="sm" variant="secondary" onClick={onCopyToGroup} icon={<IconCopy size={14} />}>
+            {t('annual.copySaToGroup')}
+          </Button>
+        )}
+      </div>
 
       <div className="flex flex-wrap gap-1.5">
         <InfoPill label={t('annual.saSessions', { count: sessionCount })} />
@@ -889,11 +964,13 @@ function EditPlanModal({
   const [generatingObjectives, setGeneratingObjectives] = useState(false);
   const [matchingSaberes, setMatchingSaberes] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
 
   const previewUrl = imageUrl.trim() ? driveImagePreviewUrl(imageUrl.trim()) : '';
 
   async function handleGenerateObjectives() {
     setGeneratingObjectives(true);
+    setError('');
     try {
       const result = await generateActivityObjectives({
         subjectName: subject.name,
@@ -903,6 +980,13 @@ function EditPlanModal({
         language,
       });
       setObjectives(result);
+    } catch (err) {
+      const kind = classifyAiError(err);
+      setError(
+        kind === 'quota' ? t('common.aiQuotaError')
+          : kind === 'overloaded' ? t('common.aiOverloadError')
+          : t('common.error')
+      );
     } finally {
       setGeneratingObjectives(false);
     }
@@ -911,6 +995,7 @@ function EditPlanModal({
   async function handleMatchSaberes() {
     if (saberItems.length === 0) return;
     setMatchingSaberes(true);
+    setError('');
     try {
       const ids = await matchCurriculumItems({
         subjectName: subject.name,
@@ -921,6 +1006,13 @@ function EditPlanModal({
         language,
       });
       setSelectedIds(new Set(ids));
+    } catch (err) {
+      const kind = classifyAiError(err);
+      setError(
+        kind === 'quota' ? t('common.aiQuotaError')
+          : kind === 'overloaded' ? t('common.aiOverloadError')
+          : t('common.error')
+      );
     } finally {
       setMatchingSaberes(false);
     }
@@ -928,6 +1020,7 @@ function EditPlanModal({
 
   async function handleSave() {
     setSaving(true);
+    setError('');
     try {
       const data = {
         aiObjectives: objectives.trim(),
@@ -937,6 +1030,9 @@ function EditPlanModal({
       await updatePlanCurriculumAndObjectives(plan.id, data);
       onSaved(data);
       onClose();
+    } catch (err) {
+      console.error('Error guardando actividad:', err);
+      setError(t('common.error'));
     } finally {
       setSaving(false);
     }
@@ -1011,9 +1107,245 @@ function EditPlanModal({
           )}
         </div>
 
+        {error && <p className="text-sm text-rose-600">{error}</p>}
+
         <div className="flex gap-2 justify-end">
           <Button variant="ghost" onClick={onClose}>{t('common.cancel')}</Button>
           <Button onClick={handleSave} disabled={saving}>{saving ? t('common.loading') : t('common.save')}</Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// -----------------------------------------------------------------------
+// Copiar una Situación de Aprendizaje ENTERA (todas sus sesiones) a uno o
+// varios grupos paralelos. A diferencia de "Copiar a otro grupo" de
+// Programación semanal (que copia una sola actividad a una franja concreta),
+// aquí se elige solo una fecha de inicio por grupo destino: las N sesiones de
+// la SA se reparten en cascada sobre las propias franjas de ese grupo a
+// partir de esa fecha, igual que hace Profi al incorporar una unidad
+// planificada a la programación semanal (ver ProfiTools.tsx > handleSave).
+// -----------------------------------------------------------------------
+function CopySaToGroupModal({ situation, plans, subject, allSubjects, allSlots, effectiveTerms, ownerId, schoolYearId, onClose }: {
+  situation: LearningSituation;
+  plans: WeeklyPlan[];
+  subject: Subject;
+  allSubjects: Subject[];
+  allSlots: TimetableSlot[];
+  effectiveTerms: ReturnType<typeof getEffectiveTerms>;
+  ownerId: string;
+  schoolYearId: string;
+  onClose: () => void;
+}) {
+  const { t, i18n } = useTranslation();
+
+  // Mismo criterio de "grupo paralelo" que en Programación semanal: comparten
+  // àrea de currículum, o se llaman igual y comparten curso.
+  const parallelSubjects = useMemo(() => {
+    const name = subject.name.trim().toLowerCase();
+    const courseTokens = new Set(
+      (subject.courseLevel ?? '').split(',').map((c) => c.trim().toLowerCase()).filter(Boolean)
+    );
+    const areas = new Set(subject.curriculumAreas ?? []);
+    return allSubjects.filter((s) => {
+      if (s.id === subject.id) return false;
+      const sTokens = (s.courseLevel ?? '').split(',').map((c) => c.trim().toLowerCase()).filter(Boolean);
+      const sameName = s.name.trim().toLowerCase() === name;
+      const shareCourse =
+        (courseTokens.size === 0 && sTokens.length === 0) || sTokens.some((c) => courseTokens.has(c));
+      const sharesArea = areas.size > 0 && (s.curriculumAreas ?? []).some((a) => areas.has(a));
+      return (sameName && shareCourse) || sharesArea;
+    });
+  }, [subject, allSubjects]);
+
+  const slotsBySubject = useMemo(() => {
+    const m = new Map<string, TimetableSlot[]>();
+    for (const s of parallelSubjects) {
+      const subjectSlots = allSlots
+        .filter((slot) => slot.subjectId === s.id)
+        .sort((a, b) => (a.day - b.day) || a.startTime.localeCompare(b.startTime));
+      m.set(s.id, subjectSlots);
+    }
+    return m;
+  }, [parallelSubjects, allSlots]);
+
+  const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
+
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [startDateBySubject, setStartDateBySubject] = useState<Record<string, string>>(() => {
+    const initial: Record<string, string> = {};
+    for (const s of parallelSubjects) initial[s.id] = today;
+    return initial;
+  });
+  const [copying, setCopying] = useState(false);
+  const [copyError, setCopyError] = useState('');
+  const [copied, setCopied] = useState(false);
+
+  function toggleSubject(subjectId: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(subjectId)) next.delete(subjectId); else next.add(subjectId);
+      return next;
+    });
+  }
+
+  async function handleConfirm() {
+    setCopying(true);
+    setCopyError('');
+    try {
+      const targetSubjectIds = [...selected].filter((id) => (slotsBySubject.get(id) ?? []).length > 0);
+      if (targetSubjectIds.length === 0) return;
+
+      await Promise.all(
+        targetSubjectIds.map(async (targetSubjectId) => {
+          const subjectSlots = slotsBySubject.get(targetSubjectId) ?? [];
+          const rawStart = startDateBySubject[targetSubjectId] || today;
+          const effectiveStart = rawStart > today ? rawStart : today;
+
+          // Reparte en cascada las N sesiones sobre las franjas propias del
+          // grupo destino, semana a semana, empezando en la fecha elegida.
+          const targets: { weekStart: string; slot: TimetableSlot }[] = [];
+          let weekStart = getWeekStart(parseISO(effectiveStart));
+          let guard = 0;
+          while (targets.length < plans.length && guard < 60) {
+            for (const slot of subjectSlots) {
+              if (targets.length >= plans.length) break;
+              const iso = isoDateForDayInWeek(weekStart, slot.day);
+              if (iso >= effectiveStart) targets.push({ weekStart, slot });
+            }
+            weekStart = shiftWeek(weekStart, 1);
+            guard += 1;
+          }
+
+          const newSaId = await createLearningSituation(ownerId, schoolYearId, targetSubjectId, situation.name);
+          await updateLearningSituation(newSaId, {
+            objectives: situation.objectives,
+            methodology: situation.methodology,
+            resources: situation.resources,
+            diversityAttention: situation.diversityAttention,
+            sabers: situation.sabers,
+            evaluationCriteria: situation.evaluationCriteria,
+          });
+
+          await Promise.all(
+            targets.map(({ weekStart: ws, slot }, i) =>
+              upsertWeeklyPlan(ownerId, schoolYearId, slot.id, targetSubjectId, ws, {
+                title: plans[i].title,
+                description: plans[i].description,
+                driveAttachments: plans[i].driveAttachments,
+                rubric: [],
+                rubricId: plans[i].rubricId,
+                evaluate: plans[i].evaluate,
+                status: 'planned',
+                saId: newSaId,
+              })
+            )
+          );
+
+          // Las sesiones evaluables (con rúbrica) también se dan de alta como
+          // actividad en el cuaderno de notas del grupo destino: si no,
+          // aunque la sesión quede marcada como evaluable en Programación
+          // semanal, no aparecería ninguna columna en Notas para calificarla
+          // en ese grupo. Se reutiliza la misma rúbrica (igual que al copiar
+          // una sola actividad a un grupo paralelo), y el trimestre se
+          // calcula a partir de la fecha real que le toca en el grupo destino
+          // (puede no coincidir con el trimestre original si cambia de
+          // semana al repartirse en cascada).
+          await Promise.all(
+            targets.map(({ weekStart: ws, slot }, i) => {
+              const plan = plans[i];
+              if (!plan.evaluate || !plan.rubricId) return Promise.resolve();
+              const iso = isoDateForDayInWeek(ws, slot.day);
+              const term = termForDate(effectiveTerms, iso) ?? effectiveTerms[0];
+              if (!term) return Promise.resolve();
+              return createGradebookActivity(ownerId, schoolYearId, {
+                subjectId: targetSubjectId,
+                termId: term.id,
+                name: plan.title,
+                rubricId: plan.rubricId,
+                weight: 100,
+                scoreType: 'numeric',
+              });
+            })
+          );
+        })
+      );
+      setCopied(true);
+      setTimeout(() => { setCopied(false); onClose(); }, 1200);
+    } catch (err) {
+      setCopyError(err instanceof Error ? err.message : t('common.error'));
+    } finally {
+      setCopying(false);
+    }
+  }
+
+  return (
+    <Modal open onClose={onClose} title={`${t('annual.copySaToGroup')} · ${situation.name}`} widthClass="max-w-md">
+      <div className="flex flex-col gap-4">
+        <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+          {t('annual.copySaToGroupHelp', { count: plans.length })}
+        </p>
+
+        {parallelSubjects.length === 0 ? (
+          <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>{t('annual.copySaToGroupNone')}</p>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {parallelSubjects.map((s) => {
+              const subjectSlots = slotsBySubject.get(s.id) ?? [];
+              const isSelected = selected.has(s.id);
+              return (
+                <div key={s.id} className="rounded-xl p-3" style={{ background: 'var(--bg-input)' }}>
+                  <label className="flex items-center gap-2 text-sm font-medium cursor-pointer" style={{ color: 'var(--text-primary)' }}>
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      disabled={subjectSlots.length === 0}
+                      onChange={() => toggleSubject(s.id)}
+                    />
+                    {subjectDisplayName(s)}
+                  </label>
+                  {subjectSlots.length === 0 ? (
+                    <p className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>
+                      {t('weekly.copyToGroupNoSlots')}
+                    </p>
+                  ) : (
+                    isSelected && (
+                      <div className="mt-2">
+                        <Input
+                          type="date"
+                          label={t('annual.copySaToGroupStartDate')}
+                          value={startDateBySubject[s.id] ?? today}
+                          min={today}
+                          onChange={(e) =>
+                            setStartDateBySubject((prev) => ({ ...prev, [s.id]: e.target.value || today }))
+                          }
+                        />
+                        <p className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>
+                          {t('annual.copySaToGroupStartDateHint', { week: formatWeekLabel(getWeekStart(parseISO(startDateBySubject[s.id] ?? today)), i18n.language) })}
+                        </p>
+                      </div>
+                    )
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {copyError && (
+          <p className="text-sm text-rose-600 bg-rose-50 rounded-xl px-3 py-2">{copyError}</p>
+        )}
+
+        <div className="flex gap-2">
+          <Button
+            onClick={handleConfirm}
+            disabled={copying || selected.size === 0}
+            icon={copied ? <IconCheck size={16} /> : undefined}
+          >
+            {copied ? t('annual.copySaToGroupSuccess') : t('annual.copySaToGroupConfirm')}
+          </Button>
+          <Button variant="ghost" onClick={onClose}>{t('common.cancel')}</Button>
         </div>
       </div>
     </Modal>

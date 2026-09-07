@@ -3,6 +3,8 @@ import {
   doc,
   addDoc,
   deleteDoc,
+  updateDoc,
+  deleteField,
   query,
   where,
   onSnapshot,
@@ -54,4 +56,20 @@ export async function addSchoolHoliday(
 
 export async function deleteSchoolHoliday(id: string): Promise<void> {
   await deleteDoc(doc(db, COL, id));
+}
+
+/**
+ * Edita un festivo ya creado (fecha, etiqueta y/o color). `label`/`color`
+ * con valor `null` explícito borran el campo (en vez de dejarlo como
+ * estaba), para poder quitar una etiqueta o un color ya puestos.
+ */
+export async function updateSchoolHoliday(
+  id: string,
+  updates: { date?: string; label?: string | null; color?: PastelFolderColor | null }
+): Promise<void> {
+  const data: Record<string, unknown> = {};
+  if (updates.date !== undefined) data.date = updates.date;
+  if (updates.label !== undefined) data.label = updates.label === null ? deleteField() : updates.label;
+  if (updates.color !== undefined) data.color = updates.color === null ? deleteField() : updates.color;
+  await updateDoc(doc(db, COL, id), data);
 }

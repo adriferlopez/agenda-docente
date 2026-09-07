@@ -5,7 +5,7 @@ import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/firebase/config';
 import { useAuthStore } from '@/store/authStore';
 import { sendPasswordReset, deleteAccountRequest, updateDisplayName, changeEmailRequest } from '@/firebase/auth';
-import { saveGeminiApiKey, removeGeminiApiKey, reportIssue, spellcheckText, type ReportIssueType } from '@/services/ai';
+import { saveGeminiApiKey, removeGeminiApiKey, reportIssue, spellcheckText, classifyAiError, type ReportIssueType } from '@/services/ai';
 import Card from '@/components/ui/Card';
 import Button from '@/components/ui/Button';
 import { Input, Textarea } from '@/components/ui/Input';
@@ -626,8 +626,13 @@ function ReportIssueCard() {
         setCheckResult('clean');
       }
       setTimeout(() => setCheckResult(null), 4000);
-    } catch {
-      setError(t('common.error'));
+    } catch (err) {
+      const kind = classifyAiError(err);
+      setError(
+        kind === 'quota' ? t('common.aiQuotaError')
+          : kind === 'overloaded' ? t('common.aiOverloadError')
+          : t('common.error')
+      );
     } finally {
       setChecking(false);
     }

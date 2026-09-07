@@ -273,7 +273,10 @@
       "dateStart": "Data d'inici",
       "dateEnd": "Data de fi (opcional)",
       "noSlotsInRange": "No hi ha classes programades en les dates seleccionades.",
-      "summary": "Es marcaran {{count}} sessions."
+      "summary": "Es marcaran {{count}} sessions.",
+      "chooseSlots": "Tria les sessions concretes en què no hi seràs:",
+      "selectAll": "Marcar totes",
+      "selectNone": "Desmarcar totes"
     },
     "holidays": {
       "button": "Festius del centre",
@@ -286,7 +289,8 @@
       "labelPlaceholder": "Ex. Festa local",
       "none": "No hi ha festius afegits.",
       "hideSubjects": "Amagar assignatures en festius",
-      "hideSubjectsHelp": "A la vista setmanal, no mostra les targetes d'assignatura dels dies marcats com a festiu del centre. La vista mensual mai mostra assignatures: només festius i reunions."
+      "hideSubjectsHelp": "A la vista setmanal, no mostra les targetes d'assignatura dels dies marcats com a festiu del centre. La vista mensual mai mostra assignatures: només festius i reunions.",
+      "editingNotice": "Editant aquest festiu. Canvia la data, el nom o el color i desa els canvis."
     },
     "meetings": {
       "noTime": "Sense hora"
@@ -357,6 +361,13 @@
     "saCollectFromSessions": "Recollir de les sessions",
     "saActionError": "No s'ha pogut generar amb Profi. Torna-ho a provar en uns segons.",
     "saCeMatrix": "Contribució a les competències específiques",
+    "copySaToGroup": "Copiar SA a un altre grup",
+    "copySaToGroupHelp": "Es copiarà aquesta Situació d'Aprenentatge sencera ({{count}} sessions) als grups que triïs, repartint-la des de la data d'inici sobre les hores pròpies de cada grup.",
+    "copySaToGroupNone": "No s'ha detectat cap grup paral·lel per a aquesta assignatura.",
+    "copySaToGroupStartDate": "Data d'inici",
+    "copySaToGroupStartDateHint": "Començarà la setmana del {{week}}.",
+    "copySaToGroupConfirm": "Copiar SA",
+    "copySaToGroupSuccess": "SA copiada",
     "cicle1": "1r cicle",
     "cicle2": "2n cicle",
     "cicle3": "3r cicle"
@@ -434,6 +445,9 @@
   },
   "common": {
     "save": "Desar",
+    "saveChanges": "Desar els canvis",
+    "aiQuotaError": "La teva clau de l'API de Gemini ha arribat al seu límit d'ús gratuït (per minut o per dia). Això és independent d'utilitzar Gemini des de la seva web o app normal, que té una quota diferent. Espera uns minuts (o fins demà si és el límit diari) i torna-ho a intentar, o revisa la teva quota a aistudio.google.com/apikey.",
+    "aiOverloadError": "El model d'IA està saturat ara mateix per molta demanda. Espera uns segons i torna-ho a intentar.",
     "cancel": "Cancel·lar",
     "delete": "Eliminar",
     "edit": "Editar",

@@ -7,7 +7,7 @@ import Modal from '@/components/ui/Modal';
 import DriveAttachmentPicker from '@/components/weekly/DriveAttachmentPicker';
 import { IconTrash, IconSparkles, IconCheck } from '@/components/ui/icons';
 import { updateMeeting, deleteMeeting } from '@/firebase/meetings';
-import { summarizeMeeting } from '@/services/ai';
+import { summarizeMeeting, classifyAiError } from '@/services/ai';
 import type { Meeting, DriveAttachment, MeetingFolder } from '@/types';
 
 interface Props {
@@ -35,9 +35,11 @@ export default function MeetingEditorModal({ meeting, language, folders, onClose
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [summarizing, setSummarizing] = useState(false);
+  const [error, setError] = useState('');
 
   async function handleSave() {
     setSaving(true);
+    setError('');
     try {
       await updateMeeting(meeting.id, {
         title,
@@ -51,22 +53,37 @@ export default function MeetingEditorModal({ meeting, language, folders, onClose
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('common.error'));
     } finally {
       setSaving(false);
     }
   }
 
   async function handleDeleteMeeting() {
-    await deleteMeeting(meeting.id);
-    onClose();
+    setError('');
+    try {
+      await deleteMeeting(meeting.id);
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('common.error'));
+    }
   }
 
   async function handleGenerateSummary() {
     setSummarizing(true);
+    setError('');
     try {
       const summary = await summarizeMeeting({ title, notes, summarySourceText, language });
       setAiSummary(summary);
       await updateMeeting(meeting.id, { aiSummary: summary });
+    } catch (err) {
+      const kind = classifyAiError(err);
+      setError(
+        kind === 'quota' ? t('common.aiQuotaError')
+          : kind === 'overloaded' ? t('common.aiOverloadError')
+          : err instanceof Error ? err.message : t('common.error')
+      );
     } finally {
       setSummarizing(false);
     }
@@ -156,6 +173,8 @@ export default function MeetingEditorModal({ meeting, language, folders, onClose
             <p className="text-sm text-ink whitespace-pre-wrap">{aiSummary}</p>
           </div>
         )}
+
+        {error && <p className="text-sm text-rose-600">{error}</p>}
 
         <div className="flex flex-wrap gap-2 pt-2">
           <Button onClick={handleSave} disabled={saving} icon={saved ? <IconCheck size={16} /> : undefined}>

@@ -21,11 +21,25 @@ interface CurriculumRefItem {
 // renderizador de PDF de react-pdf no consigue empotrar glifos desde este
 // woff2 concreto (falla el subsetting), así que se generó un .ttf a partir
 // del mismo archivo solo para este uso.
+//
+// IMPORTANTE: la ruta se pasa como URL absoluta (con protocolo y dominio),
+// no como ruta relativa a la raíz ("/fonts/..."). @react-pdf/font decide si
+// una fuente se descarga por red o se abre como archivo local comprobando
+// si el "src" es una URL válida (paquete `is-url`, que exige protocolo); una
+// ruta como "/fonts/x.ttf" no lo es, así que en versiones recientes de la
+// librería la trataba como ruta de archivo del sistema y la carga fallaba
+// en el navegador (esto rompió la descarga del PDF tras una actualización
+// de dependencias). Con la URL absoluta siempre se reconoce como
+// descargable, en cualquier versión.
+function absoluteFontUrl(path: string): string {
+  return typeof window !== 'undefined' ? new URL(path, window.location.origin).href : path;
+}
+
 Font.register({
   family: 'DancingScript',
   fonts: [
-    { src: '/fonts/DancingScript-700.ttf', fontWeight: 700 },
-    { src: '/fonts/DancingScript-600.ttf', fontWeight: 600 },
+    { src: absoluteFontUrl('/fonts/DancingScript-700.ttf'), fontWeight: 700 },
+    { src: absoluteFontUrl('/fonts/DancingScript-600.ttf'), fontWeight: 600 },
   ],
 });
 

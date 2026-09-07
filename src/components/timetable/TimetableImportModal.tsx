@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
 import { IconUpload, IconCheck, IconAlertTriangle, IconDownload } from '@/components/ui/icons';
-import { parseTimetableFile, type TimetableSlotParsed } from '@/services/ai';
+import { parseTimetableFile, classifyAiError, type TimetableSlotParsed } from '@/services/ai';
 import {
   createTimetableSlot,
   addTimeSlotDef,
@@ -77,7 +77,12 @@ export default function TimetableImportModal({
       setSubjectsToDelete(new Set(orphaned.map((s) => s.id)));
       setStep('preview');
     } catch (err) {
-      setError(err instanceof Error ? err.message : t('timetable.importErrorProcessing'));
+      const kind = classifyAiError(err);
+      setError(
+        kind === 'quota' ? t('common.aiQuotaError')
+          : kind === 'overloaded' ? t('common.aiOverloadError')
+          : err instanceof Error ? err.message : t('timetable.importErrorProcessing')
+      );
     } finally {
       setParsing(false);
       if (fileRef.current) fileRef.current.value = '';

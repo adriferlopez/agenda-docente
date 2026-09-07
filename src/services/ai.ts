@@ -1,4 +1,5 @@
 import { httpsCallable } from 'firebase/functions';
+import { FirebaseError } from 'firebase/app';
 import { functions } from '@/firebase/config';
 
 /**
@@ -133,6 +134,31 @@ export async function generateSaSabersCriteria(
   );
   const res = await fn(args);
   return res.data;
+}
+
+export type AiErrorKind = 'quota' | 'overloaded' | 'other';
+
+/**
+ * Clasifica un error de una llamada a Profi/Gemini para poder avisar al
+ * docente de la causa real en vez de un mensaje genérico de "inténtalo de
+ * nuevo": si se ha agotado la cuota GRATUITA de SU PROPIA clave de la API
+ * (por minuto o por día — independiente de usar Gemini en su web/app, que
+ * tiene una cuota totalmente distinta), si el modelo está saturado ahora
+ * mismo (mensaje transitorio, reintentar en segundos suele bastar), o
+ * cualquier otro fallo. El servidor (functions/src/gemini.ts) ya lanza los
+ * códigos 'resource-exhausted' y 'unavailable' para estos dos casos, así que
+ * aquí basta con mirar el código del error; se revisa también el texto del
+ * mensaje como red de seguridad por si el código no llegase intacto al
+ * cliente, para no dejar nunca al docente sin ninguna explicación.
+ */
+export function classifyAiError(err: unknown): AiErrorKind {
+  const code = err instanceof FirebaseError ? err.code : undefined;
+  if (code === 'functions/resource-exhausted') return 'quota';
+  if (code === 'functions/unavailable') return 'overloaded';
+  const msg = err instanceof Error ? err.message.toLowerCase() : '';
+  if (/resource_exhausted|resource-exhausted|quota|rate limit|límite de uso gratuito/.test(msg)) return 'quota';
+  if (/overloaded|unavailable|saturad|sobrecargad|high demand|alta demanda/.test(msg)) return 'overloaded';
+  return 'other';
 }
 
 interface SpellcheckInput {

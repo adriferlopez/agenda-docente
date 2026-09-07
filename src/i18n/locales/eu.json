@@ -273,7 +273,10 @@
       "dateStart": "Hasiera data",
       "dateEnd": "Amaiera data (aukerakoa)",
       "noSlotsInRange": "Ez dago klase programaturik hautatutako datetan.",
-      "summary": "{{count}} saio markatuko dira."
+      "summary": "{{count}} saio markatuko dira.",
+      "chooseSlots": "Aukeratu ez zaren egongo saio zehatzak:",
+      "selectAll": "Guztiak markatu",
+      "selectNone": "Guztiak desmarkatu"
     },
     "holidays": {
       "button": "Ikastetxeko jaiegunak",
@@ -286,7 +289,8 @@
       "labelPlaceholder": "Adib. Tokiko jaia",
       "none": "Ez dago jaiegunik gehituta.",
       "hideSubjects": "Ezkutatu irakasgaiak jaiegunetan",
-      "hideSubjectsHelp": "Asteko ikuspegian, ez ditu erakusten ikastetxeko jaiegun gisa markatutako egunetako irakasgai-txartelak. Hilabeteko ikuspegiak ez du inoiz irakasgairik erakusten: jaiegunak eta bilerak bakarrik."
+      "hideSubjectsHelp": "Asteko ikuspegian, ez ditu erakusten ikastetxeko jaiegun gisa markatutako egunetako irakasgai-txartelak. Hilabeteko ikuspegiak ez du inoiz irakasgairik erakusten: jaiegunak eta bilerak bakarrik.",
+      "editingNotice": "Jaiegun hau editatzen. Aldatu data, izena edo kolorea eta gorde aldaketak."
     },
     "meetings": {
       "noTime": "Ordurik gabe"
@@ -357,6 +361,13 @@
     "saCollectFromSessions": "Jaso saioetatik",
     "saActionError": "Ezin izan da Profirekin sortu. Saiatu berriro segundo batzuen buruan.",
     "saCeMatrix": "Konpetentzia espezifikoetarako ekarpena",
+    "copySaToGroup": "Kopiatu SA beste talde batera",
+    "copySaToGroupHelp": "Ikaskuntza Egoera hau osorik ({{count}} saio) kopiatuko da aukeratzen dituzun taldeetara, hasiera-datatik aurrera talde bakoitzaren ordu propioetan banatuz.",
+    "copySaToGroupNone": "Ez da talde paralelorik antzeman ikasgai honentzat.",
+    "copySaToGroupStartDate": "Hasiera data",
+    "copySaToGroupStartDateHint": "{{week}} astean hasiko da.",
+    "copySaToGroupConfirm": "Kopiatu SA",
+    "copySaToGroupSuccess": "SA kopiatuta",
     "cicle1": "1. zikloa",
     "cicle2": "2. zikloa",
     "cicle3": "3. zikloa"
@@ -434,6 +445,9 @@
   },
   "common": {
     "save": "Gorde",
+    "saveChanges": "Aldaketak gorde",
+    "aiQuotaError": "Zure Gemini API gakoak doako erabilera-mugara iritsi da (minutuko edo eguneko). Hau ez du zerikusirik Gemini bere web edo app arruntetik erabiltzearekin, kuota desberdina baitu horrek. Itxaron minutu batzuk (edo bihar arte eguneko muga bada) eta saiatu berriro, edo begiratu zure kuota aistudio.google.com/apikey helbidean.",
+    "aiOverloadError": "AA ereduak eskaera handia du une honetan eta gainkargatuta dago. Itxaron segundo batzuk eta saiatu berriro.",
     "cancel": "Utzi",
     "delete": "Ezabatu",
     "edit": "Editatu",

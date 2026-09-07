@@ -23,7 +23,7 @@ import {
   clearTermFinalGradeComment,
 } from '@/firebase/termFinalGrades';
 import { getGradeCommentTemplateOnce, setGradeCommentTemplate } from '@/firebase/gradeCommentTemplates';
-import { generateGradeComment, type PriorityCe } from '@/services/ai';
+import { generateGradeComment, classifyAiError, type PriorityCe } from '@/services/ai';
 import {
   subscribeRubrics,
   subscribeGradeEntries,
@@ -1658,7 +1658,12 @@ function CommentModal({
       });
       setProfiText(comment);
     } catch (err) {
-      setProfiError(err instanceof Error ? err.message : String(err));
+      const kind = classifyAiError(err);
+      setProfiError(
+        kind === 'quota' ? t('common.aiQuotaError')
+          : kind === 'overloaded' ? t('common.aiOverloadError')
+          : err instanceof Error ? err.message : String(err)
+      );
     } finally {
       setProfiLoading(false);
     }

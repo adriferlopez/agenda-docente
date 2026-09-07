@@ -31,6 +31,7 @@ import {
   planLearningUnit,
   generateSaObjectives,
   generateSaSabersCriteria,
+  classifyAiError,
   summarizeClassResults,
   suggestAdaptation,
   draftFamilyMessage,
@@ -874,8 +875,13 @@ function PlanUnitTool({ onClose }: { onClose: () => void }) {
         setRubricStates((prev) => ({ ...prev, [i]: { ...getRubricState(i), approving: false, error: t('profi.tools.exam.noTerm') } }));
         return;
       }
+      // El nombre de la rúbrica (y de la actividad en Notas, más abajo) usa
+      // siempre el título de la sesión/actividad, nunca el "rubricName" que
+      // haya podido inventar la IA (p.ej. "Rúbrica de comprensión oral"):
+      // así el docente ve el mismo nombre en Programación semanal/anual y en
+      // la libreta de notas, sin duplicar información.
       const rubricId = await createRubric(ownerId, schoolYearId, {
-        name: state.rubricName || session.evaluationName || session.title,
+        name: session.evaluationName || session.title,
         subjectId: subject.id,
         criteria: state.criteria.map((c, idx) => ({
           id: `unit-${Date.now()}-${idx}`,
@@ -1155,7 +1161,12 @@ function PlanUnitTool({ onClose }: { onClose: () => void }) {
       });
       setObjectives(result);
     } catch (err) {
-      setSaError(err instanceof Error ? err.message : String(err));
+      const kind = classifyAiError(err);
+      setSaError(
+        kind === 'quota' ? t('common.aiQuotaError')
+          : kind === 'overloaded' ? t('common.aiOverloadError')
+          : err instanceof Error ? err.message : String(err)
+      );
     } finally {
       setGeneratingObjectives(false);
     }
@@ -1179,7 +1190,12 @@ function PlanUnitTool({ onClose }: { onClose: () => void }) {
       setSabers(result.sabers);
       setCriteriaText(result.criteria);
     } catch (err) {
-      setSaError(err instanceof Error ? err.message : String(err));
+      const kind = classifyAiError(err);
+      setSaError(
+        kind === 'quota' ? t('common.aiQuotaError')
+          : kind === 'overloaded' ? t('common.aiOverloadError')
+          : err instanceof Error ? err.message : String(err)
+      );
     } finally {
       setGeneratingSabers(false);
     }

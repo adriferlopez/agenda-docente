@@ -273,7 +273,10 @@
       "dateStart": "Start date",
       "dateEnd": "End date (optional)",
       "noSlotsInRange": "No classes scheduled on the selected dates.",
-      "summary": "{{count}} sessions will be marked."
+      "summary": "{{count}} sessions will be marked.",
+      "chooseSlots": "Choose the specific class periods you'll be away for:",
+      "selectAll": "Select all",
+      "selectNone": "Deselect all"
     },
     "holidays": {
       "button": "School holidays",
@@ -286,7 +289,8 @@
       "labelPlaceholder": "E.g. Local holiday",
       "none": "No holidays added yet.",
       "hideSubjects": "Hide subjects on holidays",
-      "hideSubjectsHelp": "In the weekly view, don't show subject cards on days marked as a school holiday. The monthly view never shows subjects: only holidays and meetings."
+      "hideSubjectsHelp": "In the weekly view, don't show subject cards on days marked as a school holiday. The monthly view never shows subjects: only holidays and meetings.",
+      "editingNotice": "Editing this holiday. Change the date, name, or color and save your changes."
     },
     "meetings": {
       "noTime": "No time set"
@@ -357,6 +361,13 @@
     "saCollectFromSessions": "Collect from sessions",
     "saActionError": "Could not generate with Profi. Please try again in a few seconds.",
     "saCeMatrix": "Contribution to specific competencies",
+    "copySaToGroup": "Copy SA to another group",
+    "copySaToGroupHelp": "This whole Learning Situation ({{count}} sessions) will be copied to the groups you choose, spreading it from the start date over each group's own time slots.",
+    "copySaToGroupNone": "No parallel group was detected for this subject.",
+    "copySaToGroupStartDate": "Start date",
+    "copySaToGroupStartDateHint": "It will start the week of {{week}}.",
+    "copySaToGroupConfirm": "Copy SA",
+    "copySaToGroupSuccess": "SA copied",
     "cicle1": "1st cycle",
     "cicle2": "2nd cycle",
     "cicle3": "3rd cycle"
@@ -434,6 +445,9 @@
   },
   "common": {
     "save": "Save",
+    "saveChanges": "Save changes",
+    "aiQuotaError": "Your Gemini API key has reached its free usage limit (per minute or per day). This is separate from using Gemini's own website or app, which has a different quota. Wait a few minutes (or until tomorrow if it's the daily limit) and try again, or check your quota at aistudio.google.com/apikey.",
+    "aiOverloadError": "The AI model is currently overloaded due to high demand. Wait a few seconds and try again.",
     "cancel": "Cancel",
     "delete": "Delete",
     "edit": "Edit",

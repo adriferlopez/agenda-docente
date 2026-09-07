@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '@/store/authStore';
-import { profiChat, type ProfiMessage } from '@/services/ai';
+import { profiChat, classifyAiError, type ProfiMessage } from '@/services/ai';
 import ProfiToolModal, { PROFI_TOOL_IDS, PROFI_TOOL_ICONS, type ProfiToolId } from '@/components/profi/ProfiTools';
 
 // Escapa HTML antes de aplicar el markdown, para que un mensaje (propio o
@@ -76,10 +76,14 @@ export default function ProfiChat() {
       // Mostramos el motivo real (código + mensaje del error de Firebase)
       // además del mensaje amigable, para poder diagnosticar sin depender
       // de la consola del navegador.
+      const kind = classifyAiError(err);
+      const friendly = kind === 'quota' ? t('common.aiQuotaError')
+        : kind === 'overloaded' ? t('common.aiOverloadError')
+        : t('profi.errorMessage');
       const detail = err instanceof Error ? err.message : String(err);
       setMessages((prev) => [...prev, {
         role: 'assistant',
-        content: `${t('profi.errorMessage')}\n\n_(${detail})_`,
+        content: `${friendly}\n\n_(${detail})_`,
       }]);
     } finally {
       setLoading(false);
