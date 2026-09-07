@@ -53,6 +53,10 @@ export async function createStudentGroup(
   return ref.id;
 }
 
+export async function updateStudentGroup(groupId: string, name: string): Promise<void> {
+  await updateDoc(doc(db, GROUPS_COL, groupId), { name });
+}
+
 export async function deleteStudentGroup(groupId: string, studentIds: string[]): Promise<void> {
   const batch = writeBatch(db);
   studentIds.forEach((id) => batch.delete(doc(db, STUDENTS_COL, id)));
@@ -120,11 +124,21 @@ export async function createStudentsBatch(
 
 export async function updateStudent(
   studentId: string,
-  data: Partial<Pick<Student, 'firstName' | 'lastName' | 'groupId'>>
+  data: Partial<Pick<Student, 'firstName' | 'lastName' | 'groupId' | 'order'>>
 ): Promise<void> {
   await updateDoc(doc(db, STUDENTS_COL, studentId), data);
 }
 
 export async function deleteStudent(studentId: string): Promise<void> {
   await deleteDoc(doc(db, STUDENTS_COL, studentId));
+}
+
+/** Guarda el orden manual (arrastrar y soltar) de una lista de alumnos, p.ej.
+ * tras reordenar la libreta de Notas. */
+export async function updateStudentsOrder(studentIds: string[]): Promise<void> {
+  const batch = writeBatch(db);
+  studentIds.forEach((id, index) => {
+    batch.update(doc(db, STUDENTS_COL, id), { order: index });
+  });
+  await batch.commit();
 }

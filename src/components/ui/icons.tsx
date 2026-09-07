@@ -67,8 +67,8 @@ export function IconBooks(props: IconProps) {
 export function IconSettings(props: IconProps) {
   return (
     <svg {...base(props)}>
+      <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
       <circle cx="12" cy="12" r="3" />
-      <path d="M19.4 13a7.97 7.97 0 0 0 0-2l1.9-1.5-2-3.4-2.2.9a8 8 0 0 0-1.7-1l-.3-2.4h-4l-.3 2.4a8 8 0 0 0-1.7 1l-2.2-.9-2 3.4L4.6 11a7.97 7.97 0 0 0 0 2l-1.9 1.5 2 3.4 2.2-.9c.5.4 1.1.8 1.7 1l.3 2.4h4l.3-2.4c.6-.2 1.2-.6 1.7-1l2.2.9 2-3.4Z" />
     </svg>
   );
 }
@@ -103,6 +103,23 @@ export function IconX(props: IconProps) {
   return (
     <svg {...base(props)}>
       <path d="M18 6 6 18M6 6l12 12" />
+    </svg>
+  );
+}
+
+/** Cuadrícula de 9 puntos (estilo "todas las apps"), usada para el botón que despliega el menú completo en móvil. */
+export function IconGrid(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <circle cx="5" cy="5" r="1.4" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="5" r="1.4" fill="currentColor" stroke="none" />
+      <circle cx="19" cy="5" r="1.4" fill="currentColor" stroke="none" />
+      <circle cx="5" cy="12" r="1.4" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" />
+      <circle cx="19" cy="12" r="1.4" fill="currentColor" stroke="none" />
+      <circle cx="5" cy="19" r="1.4" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="19" r="1.4" fill="currentColor" stroke="none" />
+      <circle cx="19" cy="19" r="1.4" fill="currentColor" stroke="none" />
     </svg>
   );
 }
@@ -174,6 +191,16 @@ export function IconCheck(props: IconProps) {
   );
 }
 
+export function IconAlertTriangle(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M12 3.5 2.5 20h19L12 3.5Z" />
+      <path d="M12 9.5v4.5" />
+      <path d="M12 17.2h.01" />
+    </svg>
+  );
+}
+
 export function IconLock(props: IconProps) {
   return (
     <svg {...base(props)}>
@@ -225,6 +252,27 @@ export function IconImage(props: IconProps) {
       <rect x="3" y="3" width="18" height="18" rx="2" />
       <circle cx="8.5" cy="8.5" r="1.5" />
       <path d="m21 15-5-5L5 21" />
+    </svg>
+  );
+}
+
+export function IconEdit(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+    </svg>
+  );
+}
+
+/** Tablón de notas (Mural): rejilla de tarjetas para el icono de navegación. */
+export function IconLayoutBoard(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect x="3" y="4" width="8" height="7" rx="1.5" />
+      <rect x="13" y="4" width="8" height="11" rx="1.5" />
+      <rect x="3" y="13" width="8" height="7" rx="1.5" />
+      <rect x="13" y="17" width="8" height="3" rx="1" />
     </svg>
   );
 }

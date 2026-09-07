@@ -4,6 +4,8 @@ import {
   addDoc,
   updateDoc,
   deleteDoc,
+  deleteField,
+  getDocs,
   query,
   where,
   onSnapshot,
@@ -11,7 +13,7 @@ import {
   type Unsubscribe,
 } from 'firebase/firestore';
 import { db } from '@/firebase/config';
-import type { Rubric, GradeEntry, Evaluation } from '@/types';
+import type { Rubric, GradeEntry, Evaluation, QualitativeLevel, GradeEntryStatus } from '@/types';
 
 const RUBRICS_COL = 'rubrics';
 const GRADES_COL = 'gradeEntries';
@@ -36,6 +38,17 @@ export function subscribeRubrics(
       .sort((a, b) => a.name.localeCompare(b.name));
     callback(rubrics);
   });
+}
+
+/** Lectura puntual (no en vivo) de todas las rúbricas del docente en un curso. */
+export async function getRubricsOnce(ownerId: string, schoolYearId: string): Promise<Rubric[]> {
+  const q = query(
+    collection(db, RUBRICS_COL),
+    where('ownerId', '==', ownerId),
+    where('schoolYearId', '==', schoolYearId)
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Rubric));
 }
 
 export async function createRubric(
@@ -88,6 +101,24 @@ export function subscribeGradeEntries(
   });
 }
 
+/** Lectura puntual (no en vivo), usada para calcular la nota de otra asignatura al vuelo. */
+export async function getGradeEntriesOnce(
+  ownerId: string,
+  schoolYearId: string,
+  subjectId: string,
+  evaluation: Evaluation
+): Promise<GradeEntry[]> {
+  const q = query(
+    collection(db, GRADES_COL),
+    where('ownerId', '==', ownerId),
+    where('schoolYearId', '==', schoolYearId),
+    where('subjectId', '==', subjectId),
+    where('evaluation', '==', evaluation)
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as GradeEntry));
+}
+
 /** Calcula la nota final ponderada a partir de las puntuaciones por criterio. */
 export function calculateFinalScore(
   scores: Record<string, number>,
@@ -115,7 +146,13 @@ export function gradeLabel(score: number): string {
   return 'Excelente';
 }
 
-/** Guarda o actualiza la nota de un alumno para una evaluación y rúbrica. */
+/**
+ * Guarda o actualiza la nota de un alumno para una evaluación y rúbrica.
+ * Si se indica `activityId` (nota ligada a una actividad/columna concreta
+ * de la libreta), ese es el identificador real de la entrada, porque una
+ * misma rúbrica se puede reutilizar en varias actividades. Si no se indica
+ * (uso legacy), se identifica por rubricId como antes.
+ */
 export async function upsertGradeEntry(
   ownerId: string,
   schoolYearId: string,
@@ -123,36 +160,52 @@ export async function upsertGradeEntry(
     studentId: string;
     subjectId: string;
     rubricId: string;
+    activityId?: string;
     evaluation: Evaluation;
     scores: Record<string, number>;
     finalScore: number;
+    qualitativeLevel?: QualitativeLevel;
+    // Falta justificada/no justificada o "no hizo la actividad". Si no se
+    // indica (undefined), la entrada es una nota normal.
+    status?: GradeEntryStatus;
     notes?: string;
   }
 ): Promise<void> {
-  // Buscamos si ya existe una entrada para este alumno/asignatura/evaluación/rúbrica
-  const q = query(
-    collection(db, GRADES_COL),
+  // Buscamos si ya existe una entrada para este alumno/asignatura/evaluación
+  // y, si aplica, actividad concreta.
+  const conditions = [
     where('ownerId', '==', ownerId),
     where('studentId', '==', data.studentId),
     where('subjectId', '==', data.subjectId),
     where('evaluation', '==', data.evaluation),
-    where('rubricId', '==', data.rubricId)
-  );
-
-  const { getDocs } = await import('firebase/firestore');
+    data.activityId ? where('activityId', '==', data.activityId) : where('rubricId', '==', data.rubricId),
+  ];
+  const q = query(collection(db, GRADES_COL), ...conditions);
   const snap = await getDocs(q);
 
-  const payload = {
-    ...data,
-    ownerId,
-    schoolYearId,
-    updatedAt: serverTimestamp(),
-  };
+  const { status, ...rest } = data;
 
   if (!snap.empty) {
-    await updateDoc(snap.docs[0].ref, payload);
+    // updateDoc admite deleteField() para borrar el campo si el docente
+    // vuelve a marcar la nota como normal después de haberla marcado como
+    // falta/no hecha.
+    await updateDoc(snap.docs[0].ref, {
+      ...rest,
+      ownerId,
+      schoolYearId,
+      status: status ?? deleteField(),
+      updatedAt: serverTimestamp(),
+    });
   } else {
-    await addDoc(collection(db, GRADES_COL), payload);
+    // addDoc no admite deleteField() en un documento nuevo: si no hay
+    // status, simplemente no se incluye el campo.
+    await addDoc(collection(db, GRADES_COL), {
+      ...rest,
+      ownerId,
+      schoolYearId,
+      ...(status ? { status } : {}),
+      updatedAt: serverTimestamp(),
+    });
   }
 }
 

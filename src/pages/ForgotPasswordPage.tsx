@@ -31,12 +31,12 @@ export default function ForgotPasswordPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-cloud px-4">
       <div className="w-full max-w-md card-pastel p-8">
-        <Link to="/login" className="inline-flex items-center gap-1 text-sm text-ink-soft hover:text-lav-600 mb-6">
+        <Link to="/login" className="inline-flex items-center gap-1 text-sm text-ink-soft hover:text-accent mb-6">
           <IconChevronLeft size={16} />
           {t('common.back')}
         </Link>
 
-        <h1 className="font-display text-2xl text-lav-600 mb-1">{t('auth.resetPassword')}</h1>
+        <h1 className="font-display text-2xl text-accent mb-1">{t('auth.resetPassword')}</h1>
         <p className="text-sm text-ink-soft mb-6">{t('auth.resetPasswordHelp')}</p>
 
         {sent ? (

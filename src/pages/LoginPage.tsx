@@ -5,8 +5,34 @@ import { FirebaseError } from 'firebase/app';
 import { loginWithEmail, loginWithGoogle } from '@/firebase/auth';
 import Button from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { IconMail, IconLock, IconEye, IconEyeOff } from '@/components/ui/icons';
+import { IconMail, IconEye, IconEyeOff } from '@/components/ui/icons';
 import { IconGoogle } from '@/components/ui/IconGoogle';
+import AuthHeroPanel from '@/components/auth/AuthHeroPanel';
+
+// Traduce los códigos de error de Firebase Auth más frecuentes a un mensaje
+// concreto (en vez de un genérico "no se ha podido iniciar sesión" para
+// todo), para que el docente sepa si es la contraseña, demasiados intentos
+// fallidos seguidos, o un problema de conexión.
+function mapAuthError(err: unknown, t: (key: string) => string): string {
+  if (err instanceof FirebaseError) {
+    switch (err.code) {
+      case 'auth/invalid-credential':
+      case 'auth/wrong-password':
+      case 'auth/user-not-found':
+        return t('auth.loginError');
+      case 'auth/too-many-requests':
+        return t('auth.tooManyRequests');
+      case 'auth/network-request-failed':
+        return t('auth.networkError');
+      case 'auth/user-disabled':
+        return t('auth.userDisabled');
+      case 'auth/popup-closed-by-user':
+      case 'auth/cancelled-popup-request':
+        return '';
+    }
+  }
+  return t('auth.genericError');
+}
 
 export default function LoginPage() {
   const { t } = useTranslation();
@@ -26,11 +52,7 @@ export default function LoginPage() {
       await loginWithEmail(email, password);
       navigate('/');
     } catch (err) {
-      if (err instanceof FirebaseError) {
-        setError(t('auth.loginError'));
-      } else {
-        setError(t('common.error'));
-      }
+      setError(mapAuthError(err, t));
     } finally {
       setLoading(false);
     }
@@ -43,94 +65,119 @@ export default function LoginPage() {
       await loginWithGoogle();
       navigate('/');
     } catch (err) {
-      if (err instanceof FirebaseError && err.code !== 'auth/popup-closed-by-user') {
-        setError(t('common.error'));
-      }
+      setError(mapAuthError(err, t));
     } finally {
       setGoogleLoading(false);
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-cloud px-4">
-      <div className="w-full max-w-md card-pastel p-8">
-        <div className="text-center mb-8">
-          <h1 className="font-display text-3xl text-lav-600 mb-1">{t('app.name')}</h1>
-          <p className="text-sm text-ink-soft">{t('auth.welcomeBack')}</p>
-        </div>
+    <div className="min-h-screen flex" style={{ background: 'var(--bg)' }}>
+      {/* Panel izquierdo — hero / landing, solo desktop */}
+      <AuthHeroPanel />
 
-        <Button
-          type="button"
-          variant="secondary"
-          fullWidth
-          size="lg"
-          onClick={handleGoogleLogin}
-          disabled={googleLoading}
-          icon={<IconGoogle size={18} />}
-          className="mb-4"
-        >
-          {t('auth.continueWithGoogle')}
-        </Button>
-
-        <div className="flex items-center gap-3 mb-4">
-          <span className="h-px flex-1 bg-lav-100" />
-          <span className="text-xs text-ink-soft">{t('auth.orContinueWith')}</span>
-          <span className="h-px flex-1 bg-lav-100" />
-        </div>
-
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <Input
-            type="email"
-            label={t('auth.email')}
-            placeholder="profe@centro.edu"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            autoComplete="email"
-            icon={<IconMail size={16} />}
-          />
-          <div className="relative">
-            <Input
-              type={showPassword ? 'text' : 'password'}
-              label={t('auth.password')}
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              autoComplete="current-password"
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword((s) => !s)}
-              className="absolute right-3 top-9 text-ink-soft"
-              aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-            >
-              {showPassword ? <IconEyeOff size={18} /> : <IconEye size={18} />}
-            </button>
+      {/* Panel derecho — formulario */}
+      <div className="flex-1 flex items-center justify-center px-6 py-12">
+        <div className="w-full max-w-sm card-enter">
+          <div className="lg:hidden text-center mb-8">
+            <h1 className="font-display text-3xl font-semibold" style={{ color: 'var(--text-primary)' }}>
+              {t('app.name')}
+            </h1>
           </div>
 
-          {error && (
-            <p className="text-sm text-rose-600 bg-rose-50 rounded-xl px-3 py-2">{error}</p>
-          )}
-
-          <div className="flex justify-end -mt-1">
-            <Link to="/recuperar" className="text-xs text-lav-600 hover:underline">
-              {t('auth.forgotPassword')}
-            </Link>
+          <div className="mb-8">
+            <h2 className="font-display text-3xl font-semibold mb-1" style={{ color: 'var(--text-primary)' }}>
+              {t('auth.welcomeBack')}
+            </h2>
+            <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+              {t('auth.signInSubtitle')}
+            </p>
           </div>
 
-          <Button type="submit" disabled={loading} fullWidth size="lg">
-            <IconLock size={18} />
-            {t('auth.login')}
+          <Button
+            type="button"
+            variant="ghost"
+            fullWidth
+            size="lg"
+            onClick={handleGoogleLogin}
+            disabled={googleLoading}
+            icon={<IconGoogle size={18} />}
+            className="mb-5"
+          >
+            {t('auth.continueWithGoogle')}
           </Button>
-        </form>
 
-        <p className="text-sm text-ink-soft text-center mt-6">
-          {t('auth.noAccount')}{' '}
-          <Link to="/registro" className="text-lav-600 font-semibold hover:underline">
-            {t('auth.register')}
-          </Link>
-        </p>
+          <div className="flex items-center gap-3 mb-5">
+            <span className="h-px flex-1" style={{ background: 'var(--border)' }} />
+            <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{t('auth.orContinueWith')}</span>
+            <span className="h-px flex-1" style={{ background: 'var(--border)' }} />
+          </div>
+
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            <Input
+              type="email"
+              label={t('auth.email')}
+              placeholder="profe@centro.edu"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              autoComplete="email"
+              icon={<IconMail size={16} />}
+            />
+            <div className="relative">
+              <Input
+                type={showPassword ? 'text' : 'password'}
+                label={t('auth.password')}
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                autoComplete="current-password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((s) => !s)}
+                className="absolute right-3 top-9"
+                style={{ color: 'var(--text-secondary)' }}
+              >
+                {showPassword ? <IconEyeOff size={18} /> : <IconEye size={18} />}
+              </button>
+            </div>
+
+            {error && (
+              <p className="text-sm rounded-xl px-3 py-2" style={{ color: 'var(--danger-text)', background: 'rgba(248,113,113,0.1)' }}>
+                {error}
+              </p>
+            )}
+
+            <div className="flex justify-end -mt-1">
+              <Link to="/recuperar" className="text-xs hover:underline" style={{ color: 'var(--accent)' }}>
+                {t('auth.forgotPassword')}
+              </Link>
+            </div>
+
+            <Button type="submit" disabled={loading} fullWidth size="lg">
+              {t('auth.login')}
+            </Button>
+          </form>
+
+          <p className="text-sm text-center mt-6" style={{ color: 'var(--text-secondary)' }}>
+            {t('auth.noAccount')}{' '}
+            <Link to="/registro" className="font-semibold hover:underline" style={{ color: 'var(--accent)' }}>
+              {t('auth.register')}
+            </Link>
+          </p>
+
+          <p className="lg:hidden text-[11px] text-center mt-8" style={{ color: 'var(--text-secondary)' }}>
+            {t('footer.copyright', { year: new Date().getFullYear() })}
+          </p>
+          <p className="lg:hidden flex flex-wrap justify-center gap-x-3 gap-y-1 text-[11px] mt-1.5" style={{ color: 'var(--text-secondary)' }}>
+            <Link to="/legal/aviso-legal" className="hover:underline">{t('footer.legalNotice')}</Link>
+            <Link to="/legal/privacidad" className="hover:underline">{t('footer.privacy')}</Link>
+            <Link to="/legal/cookies" className="hover:underline">{t('footer.cookies')}</Link>
+            <Link to="/legal/terminos" className="hover:underline">{t('footer.terms')}</Link>
+          </p>
+        </div>
       </div>
     </div>
   );

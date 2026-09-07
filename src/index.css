@@ -1,103 +1,776 @@
-@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Quicksand:wght@400;500;600;700&family=Nunito:wght@400;500;600;700;800&display=swap');
 @import "tailwindcss";
 
+/* Tipografías autoalojadas (en vez de @import desde fonts.googleapis.com):
+   cargar fuentes directamente desde el CDN de Google en cada visita envía
+   la IP de quien visita la página a servidores de Google sin que medie
+   ninguna base legal para ello — varios tribunales europeos ya lo han
+   sancionado. Sirviendo los propios archivos desde /fonts no se hace
+   ninguna petición a terceros para las tipografías.
+   Los 6 archivos .woff2 viven en public/fonts/ (paquetes @fontsource/inter
+   y @fontsource/dancing-script, mismo origen que Google Fonts). Antes de
+   que existieran estos archivos, faltaba este paso y el navegador caía al
+   fallback genérico (system-ui / cursive de cada SO) sin dar error visible
+   — por eso los títulos (Dancing Script → "cursive" genérico) se veían con
+   una tipografía y tamaño distintos según el sistema operativo (el
+   fallback "cursive" de Windows no es ni de lejos igual que el de macOS/iOS). */
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/Inter-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/Inter-500.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/Inter-600.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/Inter-700.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Dancing Script';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/DancingScript-600.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Dancing Script';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/DancingScript-700.woff2') format('woff2');
+}
+
+/* ═══════════════════════════════════════════════════════
+   PALETA — 5 temas pastel claros e intercambiables (Lavanda,
+   Indigo, Turquesa, Menta, Coral), elegidos por el docente entre
+   una selección de tonos pastel suaves (S≈42%). El docente elige
+   uno desde el botón flotante de tema. --border/--accent-light
+   usan el tono pastel claro tal cual; --accent/--bg-sidebar son
+   derivados más saturados del mismo tono para mantener el texto
+   legible (blanco sobre botones/sidebar, y --accent como texto
+   también en modo oscuro). El modo oscuro sobreescribe fondo/texto
+   manteniendo el acento (ver [data-mode="dark"] más abajo).
+   ═══════════════════════════════════════════════════════ */
+/* — TEMA: Lavanda — */
+:root,
+[data-theme="lavender2"] {
+  --accent:            #8A64C0;
+  --accent-soft:       #B099D0;
+  --accent-light:      #F1EBF9;
+  --accent-text:       #6F3BB9;
+  --gold:              #B54BB5;
+  --gold-light:        #F9EBF9;
+  --bg:                #FAF8FC;
+  --bg-card:           #FFFFFF;
+  --bg-sidebar:        #E0D1F5;
+  --bg-sidebar-hover:  #C2ABE3;
+  --bg-input:          #FFFFFF;
+  --border:            #E0D1F5;
+  --border-input:      #C2ABE3;
+  --text-primary:      #1B1424;
+  --text-secondary:    #695C7A;
+  --text-sidebar:      #6F3BB9;
+  --text-sidebar-soft: #8A64C0;
+  --shadow-card:       0 1px 3px rgba(0,0,0,0.05), 0 4px 16px -4px rgba(138,100,192,0.12);
+  --shadow-btn:        0 1px 2px rgba(0,0,0,0.08);
+  --focus-ring:        0 0 0 3px rgba(138,100,192,0.28);
+  /* Texto de error/aviso: un solo valor para toda la app (no varía por
+     tema de color, solo por modo claro/oscuro — ver [data-mode="dark"]),
+     con contraste suficiente en fondo blanco. Antes había varios rojos
+     sueltos hardcodeados directo en los componentes (#B91C1C, #F87171...)
+     que en modo oscuro quedaban casi ilegibles sobre el fondo oscuro. */
+  --danger-text:       #DC2626;
+}
+
+/* — TEMA: Indigo — */
+[data-theme="indigo1"] {
+  --accent:            #686FC1;
+  --accent-soft:       #9DA1D1;
+  --accent-light:      #EBEDF9;
+  --accent-text:       #404AC3;
+  --gold:              #BA5677;
+  --gold-light:        #F9EBF0;
+  --bg:                #F8F8FC;
+  --bg-card:           #FFFFFF;
+  --bg-sidebar:        #D1D4F5;
+  --bg-sidebar-hover:  #ABB0E3;
+  --bg-input:          #FFFFFF;
+  --border:            #D1D4F5;
+  --border-input:      #ABB0E3;
+  --text-primary:      #141524;
+  --text-secondary:    #5C5F7A;
+  --text-sidebar:      #404AC3;
+  --text-sidebar-soft: #686FC1;
+  --shadow-card:       0 1px 3px rgba(0,0,0,0.05), 0 4px 16px -4px rgba(104,111,193,0.12);
+  --shadow-btn:        0 1px 2px rgba(0,0,0,0.08);
+  --focus-ring:        0 0 0 3px rgba(104,111,193,0.28);
+}
+
+/* — TEMA: Turquesa — */
+[data-theme="turquoise1"] {
+  --accent:            #378188;
+  --accent-soft:       #54A8B0;
+  --accent-light:      #EBF8F9;
+  --accent-text:       #216267;
+  --gold:              #8F733A;
+  --gold-light:        #F9F5EB;
+  --bg:                #F8FBFC;
+  --bg-card:           #FFFFFF;
+  --bg-sidebar:        #D1F2F5;
+  --bg-sidebar-hover:  #ABDEE3;
+  --bg-input:          #FFFFFF;
+  --border:            #D1F2F5;
+  --border-input:      #ABDEE3;
+  --text-primary:      #142324;
+  --text-secondary:    #5C787A;
+  --text-sidebar:      #216267;
+  --text-sidebar-soft: #378188;
+  --shadow-card:       0 1px 3px rgba(0,0,0,0.05), 0 4px 16px -4px rgba(55,129,136,0.12);
+  --shadow-btn:        0 1px 2px rgba(0,0,0,0.08);
+  --focus-ring:        0 0 0 3px rgba(55,129,136,0.28);
+}
+
+/* — TEMA: Menta — */
+[data-theme="mint4"] {
+  --accent:            #36846A;
+  --accent-soft:       #51AE8F;
+  --accent-light:      #EBF9F5;
+  --accent-text:       #20644D;
+  --gold:              #437CA4;
+  --gold-light:        #EBF3F9;
+  --bg:                #F8FCFA;
+  --bg-card:           #FFFFFF;
+  --bg-sidebar:        #D1F5E9;
+  --bg-sidebar-hover:  #ABE3D0;
+  --bg-input:          #FFFFFF;
+  --border:            #D1F5E9;
+  --border-input:      #ABE3D0;
+  --text-primary:      #14241F;
+  --text-secondary:    #5C7A70;
+  --text-sidebar:      #20644D;
+  --text-sidebar-soft: #36846A;
+  --shadow-card:       0 1px 3px rgba(0,0,0,0.05), 0 4px 16px -4px rgba(54,132,106,0.12);
+  --shadow-btn:        0 1px 2px rgba(0,0,0,0.08);
+  --focus-ring:        0 0 0 3px rgba(54,132,106,0.28);
+}
+
+/* — TEMA: Coral — */
+[data-theme="coral1"] {
+  --accent:            #B75C4E;
+  --accent-soft:       #C68D84;
+  --accent-light:      #F9EDEB;
+  --accent-text:       #963D2F;
+  --gold:              #8C7439;
+  --gold-light:        #F9F5EB;
+  --bg:                #FCF9F8;
+  --bg-card:           #FFFFFF;
+  --bg-sidebar:        #F5D6D1;
+  --bg-sidebar-hover:  #E3B2AB;
+  --bg-input:          #FFFFFF;
+  --border:            #F5D6D1;
+  --border-input:      #E3B2AB;
+  --text-primary:      #241614;
+  --text-secondary:    #7A605C;
+  --text-sidebar:      #963D2F;
+  --text-sidebar-soft: #B75C4E;
+  --shadow-card:       0 1px 3px rgba(0,0,0,0.05), 0 4px 16px -4px rgba(183,92,78,0.12);
+  --shadow-btn:        0 1px 2px rgba(0,0,0,0.08);
+  --focus-ring:        0 0 0 3px rgba(183,92,78,0.28);
+}
+
+/* — TEMA: Cielo — */
+[data-theme="sky2"] {
+  --accent:            #437CA4;
+  --accent-soft:       #709DBC;
+  --accent-light:      #EBF3F9;
+  --accent-text:       #295D82;
+  --gold:              #A36943;
+  --gold-light:        #F9F1EB;
+  --bg:                #F8FAFC;
+  --bg-card:           #FFFFFF;
+  --bg-sidebar:        #D1E6F5;
+  --bg-sidebar-hover:  #ABCCE3;
+  --bg-input:          #FFFFFF;
+  --border:            #D1E6F5;
+  --border-input:      #ABCCE3;
+  --text-primary:      #141D24;
+  --text-secondary:    #5C6E7A;
+  --text-sidebar:      #295D82;
+  --text-sidebar-soft: #437CA4;
+  --shadow-card:       0 1px 3px rgba(0,0,0,0.05), 0 4px 16px -4px rgba(67,124,164,0.12);
+  --shadow-btn:        0 1px 2px rgba(0,0,0,0.08);
+  --focus-ring:        0 0 0 3px rgba(67,124,164,0.28);
+}
+
+/* — TEMA: Melocotón — */
+[data-theme="peach2"] {
+  --accent:            #A36943;
+  --accent-soft:       #BC8D6F;
+  --accent-light:      #F9F1EB;
+  --accent-text:       #814C29;
+  --gold:              #437CA4;
+  --gold-light:        #EBF3F9;
+  --bg:                #FCFAF8;
+  --bg-card:           #FFFFFF;
+  --bg-sidebar:        #F5DFD1;
+  --bg-sidebar-hover:  #E3C1AB;
+  --bg-input:          #FFFFFF;
+  --border:            #F5DFD1;
+  --border-input:      #E3C1AB;
+  --text-primary:      #241A14;
+  --text-secondary:    #7A685C;
+  --text-sidebar:      #814C29;
+  --text-sidebar-soft: #A36943;
+  --shadow-card:       0 1px 3px rgba(0,0,0,0.05), 0 4px 16px -4px rgba(163,105,67,0.12);
+  --shadow-btn:        0 1px 2px rgba(0,0,0,0.08);
+  --focus-ring:        0 0 0 3px rgba(163,105,67,0.28);
+}
+
+
+
+/* ── MODO OSCURO ── */
+[data-mode="dark"] {
+  --bg:            #0F172A;
+  --bg-card:       #1E293B;
+  --bg-sidebar:    #020617;
+  --bg-sidebar-hover: #0F172A;
+  --bg-input:      #1E293B;
+  --border:        #334155;
+  --border-input:  #475569;
+  --text-primary:  #F1F5F9;
+  --text-secondary:#94A3B8;
+  --text-sidebar:  #CBD5E1;
+  --text-sidebar-soft: #64748B;
+  --shadow-card:   0 1px 3px rgba(0,0,0,0.3), 0 4px 16px -4px rgba(0,0,0,0.4);
+  /* Rojo más claro que en modo día: el #DC2626 base pierde casi todo
+     el contraste sobre el fondo oscuro (#0F172A/#1E293B). */
+  --danger-text:   #FCA5A5;
+}
+
+/* ═══════════════════════════════════════════════════════
+   TIPOGRAFÍA & BASE
+   ═══════════════════════════════════════════════════════ */
 @theme {
-  /* Familias tipográficas */
-  --font-display: "Fredoka", "Quicksand", sans-serif; /* lettering / títulos */
-  --font-sans: "Nunito", system-ui, sans-serif;
+  /* Display: solo para títulos grandes (h1/h2, hero) — se usa con
+     mesura, no en toda la interfaz, para que siga siendo distintiva.
+     Caligráfica plana (sin sombras), en el color de acento del tema
+     activo, que cambia según la paleta que elija el docente. */
+  --font-display: "Dancing Script", cursive;
+  --font-sans:    "Inter", system-ui, sans-serif;
 
-  /* Paleta pastel principal */
-  --color-lav-50: #F5F3FF;
-  --color-lav-100: #EDE9FE;
-  --color-lav-200: #DDD6FE;
-  --color-lav-300: #C4B5FD;
-  --color-lav-400: #A78BFA;
-  --color-lav-500: #8B7CF6;
-  --color-lav-600: #7C6AE8;
-
-  --color-mint-50: #ECFDF5;
-  --color-mint-100: #D1FAE5;
-  --color-mint-200: #A7F3D0;
-  --color-mint-300: #6EE7B7;
-  --color-mint-400: #34D399;
-  --color-mint-600: #0F9D72;
-
-  --color-peach-50: #FFF5F0;
-  --color-peach-100: #FFE4D6;
-  --color-peach-200: #FFCBB3;
-  --color-peach-300: #FFAD8A;
-  --color-peach-400: #FF8A65;
-  --color-peach-600: #E8602F;
-
-  --color-rose-50: #FFF0F5;
-  --color-rose-100: #FCE7F3;
-  --color-rose-200: #FBCFE8;
-  --color-rose-300: #F9A8D4;
-  --color-rose-400: #F472B6;
-  --color-rose-600: #DB4A92;
-
-  --color-sky-50: #F0F9FF;
-  --color-sky-100: #E0F2FE;
-  --color-sky-200: #BAE6FD;
-  --color-sky-300: #7DD3FC;
-  --color-sky-400: #38BDF8;
-  --color-sky-600: #0284C7;
-
-  --color-butter-50: #FFFBEB;
+  --color-lav-50:     #F5F3FF;
+  --color-lav-100:    #EDE9FE;
+  --color-lav-200:    #DDD6FE;
+  --color-lav-300:    #C4B5FD;
+  --color-lav-400:    #A78BFA;
+  --color-lav-500:    #8B7CF6;
+  --color-lav-600:    #7C6AE8;
+  --color-mint-50:    #ECFDF5;
+  --color-mint-100:   #D1FAE5;
+  --color-mint-200:   #A7F3D0;
+  --color-mint-300:   #6EE7B7;
+  --color-mint-400:   #34D399;
+  --color-mint-600:   #0F9D72;
+  --color-peach-50:   #FFF5F0;
+  --color-peach-100:  #FFE4D6;
+  --color-peach-200:  #FFCBB3;
+  --color-peach-300:  #FFAD8A;
+  --color-peach-400:  #FF8A65;
+  --color-peach-600:  #E8602F;
+  --color-rose-50:    #FFF0F5;
+  --color-rose-100:   #FCE7F3;
+  --color-rose-200:   #FBCFE8;
+  --color-rose-300:   #F9A8D4;
+  --color-rose-400:   #F472B6;
+  --color-rose-500:   #EC4899;
+  --color-rose-600:   #DB4A92;
+  --color-sky-50:     #F0F9FF;
+  --color-sky-100:    #E0F2FE;
+  --color-sky-200:    #BAE6FD;
+  --color-sky-300:    #7DD3FC;
+  --color-sky-400:    #38BDF8;
+  --color-sky-600:    #0284C7;
+  --color-butter-50:  #FFFBEB;
   --color-butter-100: #FEF3C7;
   --color-butter-200: #FDE68A;
   --color-butter-300: #FCD34D;
   --color-butter-400: #FBBF24;
   --color-butter-600: #D97706;
 
-  --color-ink: #2D2A3D;
-  --color-ink-soft: #5B5670;
-  --color-cloud: #FAF9FC;
+  /* Tonos "profundos" — mismo círculo cromático que los seis de arriba,
+     pero más saturados/oscuros, para ampliar la paleta de asignaturas sin
+     perder la coherencia (lav↔plum, mint↔forest, peach↔terracotta,
+     rose↔fuchsia, sky↔indigo, butter↔lime). */
+  --color-plum-50:       #FAF5FF;
+  --color-plum-100:      #F3E8FF;
+  --color-plum-200:      #E9D5FF;
+  --color-plum-300:      #D8B4FE;
+  --color-plum-400:      #C084FC;
+  --color-plum-600:      #9333EA;
+  --color-forest-50:     #F0FDF4;
+  --color-forest-100:    #DCFCE7;
+  --color-forest-200:    #BBF7D0;
+  --color-forest-300:    #86EFAC;
+  --color-forest-400:    #4ADE80;
+  --color-forest-600:    #16A34A;
+  --color-terracotta-50:  #FEF2F2;
+  --color-terracotta-100: #FEE2E2;
+  --color-terracotta-200: #FECACA;
+  --color-terracotta-300: #FCA5A5;
+  --color-terracotta-400: #F87171;
+  --color-terracotta-600: #DC2626;
+  --color-fuchsia-50:    #FDF4FF;
+  --color-fuchsia-100:   #FAE8FF;
+  --color-fuchsia-200:   #F5D0FE;
+  --color-fuchsia-300:   #F0ABFC;
+  --color-fuchsia-400:   #E879F9;
+  --color-fuchsia-600:   #C026D3;
+  --color-indigo-50:     #EEF2FF;
+  --color-indigo-100:    #E0E7FF;
+  --color-indigo-200:    #C7D2FE;
+  --color-indigo-300:    #A5B4FC;
+  --color-indigo-400:    #818CF8;
+  --color-indigo-600:    #4F46E5;
+  --color-lime-50:       #F7FEE7;
+  --color-lime-100:      #ECFCCB;
+  --color-lime-200:      #D9F99D;
+  --color-lime-300:      #BEF264;
+  --color-lime-400:      #A3E635;
+  --color-lime-600:      #65A30D;
 
-  --radius-card: 20px;
-  --radius-pill: 999px;
+  /* Ocho colores nuevos, ampliando la paleta de asignaturas de 12 a 20
+     (ver comentario junto a SUBJECT_COLORS en src/types/index.ts): cubren
+     tonalidades que aún no tenían representación entre las 12 originales. */
+  --color-teal-50:    #F0FDFA;
+  --color-teal-100:   #CCFBF1;
+  --color-teal-200:   #99F6E4;
+  --color-teal-300:   #5EEAD4;
+  --color-teal-400:   #2DD4BF;
+  --color-teal-600:   #0D9488;
+  --color-cyan-50:    #ECFEFF;
+  --color-cyan-100:   #CFFAFE;
+  --color-cyan-200:   #A5F3FC;
+  --color-cyan-300:   #67E8F9;
+  --color-cyan-400:   #22D3EE;
+  --color-cyan-600:   #0891B2;
+  --color-blue-50:    #EFF6FF;
+  --color-blue-100:   #DBEAFE;
+  --color-blue-200:   #BFDBFE;
+  --color-blue-300:   #93C5FD;
+  --color-blue-400:   #60A5FA;
+  --color-blue-600:   #2563EB;
+  --color-yellow-50:  #FEFCE8;
+  --color-yellow-100: #FEF9C3;
+  --color-yellow-200: #FEF08A;
+  --color-yellow-300: #FDE047;
+  --color-yellow-400: #FACC15;
+  --color-yellow-600: #CA8A04;
+  --color-orange-50:  #FFF7ED;
+  --color-orange-100: #FFEDD5;
+  --color-orange-200: #FED7AA;
+  --color-orange-300: #FDBA74;
+  --color-orange-400: #FB923C;
+  --color-orange-600: #EA580C;
+  --color-crimson-50:  #FFF1F2;
+  --color-crimson-100: #FFE4E6;
+  --color-crimson-200: #FECDD3;
+  --color-crimson-300: #FDA4AF;
+  --color-crimson-400: #FB7185;
+  --color-crimson-600: #E11D48;
+  --color-stone-50:   #FAFAF9;
+  --color-stone-100:  #F5F5F4;
+  --color-stone-200:  #E7E5E4;
+  --color-stone-300:  #D6D3D1;
+  --color-stone-400:  #A8A29E;
+  --color-stone-600:  #57534E;
+  --color-slate-50:   #F8FAFC;
+  --color-slate-100:  #F1F5F9;
+  --color-slate-200:  #E2E8F0;
+  --color-slate-300:  #CBD5E1;
+  --color-slate-400:  #94A3B8;
+  --color-slate-600:  #475569;
+
+  --color-ink:        #0F172A;
+  --color-ink-soft:   #64748B;
+  --color-cloud:      #F8FAFC;
+  --radius-card:      12px;
+  --radius-pill:      999px;
+  /* Botones: esquinas contenidas (no pill) para un estilo más sobrio. */
+  --radius-btn:       10px;
 }
 
-html, body, #root {
-  height: 100%;
+/* Fija el tamaño de fuente raíz en 16px, sea cual sea el ajuste de
+   "Tamaño de fuente" del navegador (Chrome → Configuración →
+   Aspecto/Accesibilidad; es distinto del zoom de página y NO se resetea
+   con Ctrl+0). Como casi todo el espaciado y tipografía de la app usa
+   unidades rem de Tailwind, si ese ajuste está por encima de 16px
+   (algo habitual en pantallas de portátil con accesibilidad activada)
+   la interfaz entera se escala hacia arriba y deja de caber en la
+   pantalla, obligando a hacer scroll para ver secciones que en un
+   navegador con el tamaño de fuente por defecto se ven completas.
+   Con esta regla la app siempre se ve al mismo tamaño real,
+   independientemente de esa preferencia del navegador. */
+html {
+  font-size: 16px;
+  /* Algunas versiones de Chrome (sobre todo en portátiles Windows con
+     escalado de pantalla del sistema operativo activo, p.ej. 125%/150% en
+     Configuración > Pantalla) aplican un ajuste automático de tamaño de
+     texto que no se refleja en el indicador de zoom de la propia ventana
+     (que sigue marcando "100%"), haciendo que el texto se vea más grande de
+     lo esperado. Esta regla lo desactiva explícitamente. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
+
+html, body, #root { height: 100%; }
 
 body {
   margin: 0;
   font-family: var(--font-sans);
-  background: var(--color-cloud);
-  color: var(--color-ink);
+  background: var(--bg);
+  color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
+  /* ✅ GPU: solo opacity en la transición del body */
+  transition: opacity 0.15s ease;
 }
 
-h1, h2, h3, .font-display {
+/* La tipografía de acento (Fraunces) se reserva para títulos grandes
+   (h1/h2, hero) para que siga siendo distintiva; h3 y el resto de la
+   interfaz usan la sans-serif de cuerpo. */
+h1, h2, .font-display {
   font-family: var(--font-display);
-  font-weight: 600;
-  letter-spacing: 0.01em;
+  font-weight: 700;
+  /* Cursiva conectada: sin letter-spacing negativo (rompería los
+     trazos de unión entre letras) y algo más de tamaño, porque a
+     igual altura de píxel una caligráfica se percibe más pequeña
+     que una sans/serif recta. */
+  letter-spacing: 0;
+  font-size: 1.2em;
+  line-height: 1.25;
 }
 
-/* Scrollbar suave */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-::-webkit-scrollbar-thumb {
-  background: var(--color-lav-200);
-  border-radius: 999px;
+h3 {
+  font-family: var(--font-sans);
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
+/* Scrollbar sutil */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; }
+
+/* ═══════════════════════════════════════════════════════
+   ACCESIBILIDAD — prefers-reduced-motion
+   Cuando el usuario prefiere menos movimiento: elimina
+   todas las transiciones y animaciones.
+   ═══════════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
+   CARDS
+   ✅ Entrada con transform + opacity (GPU)
+   ✅ Sin transiciones de background/border
+   ═══════════════════════════════════════════════════════ */
 .card-pastel {
-  background: white;
+  background: var(--bg-card);
   border-radius: var(--radius-card);
-  border: 1px solid rgba(0,0,0,0.04);
-  box-shadow: 0 4px 20px -8px rgba(124, 106, 232, 0.18);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-card);
 }
 
+.card-pastel:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* Animación de entrada para cards (scale + opacity, GPU) */
+@keyframes cardIn {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+  to   { opacity: 1; transform: none; }
+}
+.card-enter {
+  animation: cardIn 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Transición entre pantallas de la app (ver AppLayout: se aplica al
+   contenido enrutado, con key=ruta para que se repita en cada
+   navegación). GPU-only, igual que el resto de animaciones. */
+@keyframes pageIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+.page-transition {
+  animation: pageIn 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ═══════════════════════════════════════════════════════
+   BOTONES
+   ✅ transform + opacity ONLY para animaciones
+   ✅ Todos los estados: hover, active, focus-visible, disabled
+   ═══════════════════════════════════════════════════════ */
+
+/* Base compartida */
+.btn-base {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  border-radius: var(--radius-btn);
+  /* ✅ GPU: solo transform + opacity */
+  transition: transform 120ms cubic-bezier(0.16,1,0.3,1),
+              opacity   120ms ease;
+  will-change: transform, opacity;
+  position: relative;
+  user-select: none;
+}
+
+.btn-base:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Primario */
+.btn-primary {
+  background: var(--accent);
+  color: white;
+  box-shadow: var(--shadow-btn);
+}
+.btn-primary:hover:not(:disabled)       { opacity: 0.88; }
+.btn-primary:active:not(:disabled)      { transform: scale(0.96); opacity: 0.95; }
+.btn-primary:focus-visible              { outline: none; box-shadow: var(--focus-ring); }
+
+/* Dorado */
+.btn-gold {
+  background: var(--gold);
+  color: white;
+  box-shadow: var(--shadow-btn);
+}
+.btn-gold:hover:not(:disabled)          { opacity: 0.88; }
+.btn-gold:active:not(:disabled)         { transform: scale(0.96); }
+.btn-gold:focus-visible                 { outline: none; box-shadow: var(--focus-ring); }
+
+/* Secundario */
+.btn-secondary {
+  background: var(--accent-light);
+  color: var(--accent-text);
+  border: 1px solid var(--border);
+}
+.btn-secondary:hover:not(:disabled)     { opacity: 0.82; }
+.btn-secondary:active:not(:disabled)    { transform: scale(0.96); }
+.btn-secondary:focus-visible            { outline: none; box-shadow: var(--focus-ring); }
+
+/* Ghost */
+.btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+.btn-ghost:hover:not(:disabled)         { opacity: 0.75; }
+.btn-ghost:active:not(:disabled)        { transform: scale(0.96); }
+.btn-ghost:focus-visible                { outline: none; box-shadow: var(--focus-ring); }
+
+/* Danger */
+.btn-danger {
+  background: #F87171;
+  color: white;
+}
+.btn-danger:hover:not(:disabled)        { opacity: 0.88; }
+.btn-danger:active:not(:disabled)       { transform: scale(0.96); }
+.btn-danger:focus-visible               { outline: none; box-shadow: 0 0 0 3px rgba(248,113,113,0.35); }
+
+/* Pill wrapper (tamaños) — para pestañas/segmented controls */
 .btn-pill {
   border-radius: var(--radius-pill);
   font-weight: 600;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
-.btn-pill:active {
+
+/* Botones de acción (Button.tsx): esquinas contenidas, no pill. */
+.btn-rounded {
+  border-radius: var(--radius-btn);
+  font-weight: 600;
+}
+
+/* ═══════════════════════════════════════════════════════
+   INPUTS & SELECTS
+   ✅ focus-visible con box-shadow (sin outline nativo)
+   ═══════════════════════════════════════════════════════ */
+input, select, textarea {
+  background: var(--bg-input);
+  color: var(--text-primary);
+  border-color: var(--border-input);
+  /* ✅ Solo opacity para el estado de disabled */
+  transition: opacity 120ms ease;
+  /* Red de seguridad global: por defecto min-width es "auto" (= el ancho
+     del contenido), no 0. Los <input type="date"> en particular tienen un
+     ancho intrínseco propio (segmentos día/mes/año) que, dentro de una fila
+     o columna estrecha (modales en móvil), podía ganarle al width:100% que
+     ya fijan los componentes Input/Select y hacer que el campo se saliera
+     del contenedor en vez de encogerse. Con min-width:0 + max-width:100%
+     aquí, a nivel de navegador, queda cubierto pase lo que pase, aunque
+     algún sitio use un <input> nativo sin pasar por el componente Input. */
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+input:disabled,
+select:disabled,
+textarea:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ═══════════════════════════════════════════════════════
+   SIDEBAR
+   ✅ Links con transform para hover (GPU)
+   ═══════════════════════════════════════════════════════ */
+.sidebar {
+  background: var(--bg-sidebar);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Estados genéricos de los links del sidebar (no color: eso lo fija
+   siempre el inline style de cada NavLink/botón, según el tema activo,
+   y las reglas .sidebar-link y .nav-active de más abajo). Antes había
+   aquí reglas "sidebar a:hover { color: white }" heredadas de la época
+   del sidebar oscuro — ya no pintan nada (el inline style siempre gana
+   en cascada CSS), pero se han quitado del todo por higiene: eran
+   ruido que ya no encajaba con el sidebar pastel. */
+.sidebar a,
+.sidebar button {
+  transition: transform 100ms ease, opacity 100ms ease;
+}
+.sidebar a:active,
+.sidebar button:active {
   transform: scale(0.97);
+}
+.sidebar a:focus-visible,
+.sidebar button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent);
+  border-radius: 8px;
+}
+
+/* Nav link activo: fondo pastel + tono medio del acento (más vivo que
+   el texto normal del menú, que usa el tono más oscuro; nunca blanco). */
+.nav-active {
+  background: var(--accent-light) !important;
+  color: var(--accent) !important;
+  opacity: 1 !important;
+}
+
+/* Hover del menú lateral: CSS puro (:hover), no JS. Mutar el estilo
+   inline por JavaScript (onMouseEnter/onMouseLeave con
+   element.style.x = ...) se desincroniza de React: tras el primer hover,
+   React ya no vuelve a aplicar el color porque su registro interno de
+   props no ha cambiado, así que el texto se queda sin color y hereda el
+   de un ancestro (efecto "se pone blanco" reportado). Con :hover del
+   navegador no hay ese problema. .nav-active mantiene su !important así
+   que un ítem activo no cambia al pasar el ratón por encima. */
+.sidebar-link:not(.nav-active):hover,
+.sidebar-footer-link:hover {
+  background: var(--bg-sidebar-hover);
+}
+.sidebar-link-secondary:not(.nav-active):hover {
+  background: var(--bg-sidebar-hover);
+  color: var(--accent-text);
+}
+.sidebar-logout-link:hover {
+  background: rgba(220, 38, 38, 0.12);
+  color: var(--danger-text);
+}
+
+/* ═══════════════════════════════════════════════════════
+   MODALES — animación de entrada GPU
+   ═══════════════════════════════════════════════════════ */
+@keyframes modalIn {
+  from { opacity: 0; transform: translateY(12px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)    scale(1); }
+}
+@keyframes overlayIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.modal-overlay {
+  animation: overlayIn 150ms ease both;
+}
+.modal-panel {
+  animation: modalIn 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: transform, opacity;
+}
+
+/* ═══════════════════════════════════════════════════════
+   UTILITY CLASSES — color del tema activo
+   ═══════════════════════════════════════════════════════ */
+/* Compatibilidad legacy */
+.text-ink           { color: var(--text-primary)   !important; }
+.text-ink-soft      { color: var(--text-secondary) !important; }
+.bg-cloud           { background: var(--bg)        !important; }
+
+/* Acento del tema */
+.text-accent        { color: var(--accent)         !important; }
+.bg-accent          { background: var(--accent)    !important; }
+.bg-accent-light    { background: var(--accent-light) !important; }
+.border-accent      { border-color: var(--accent)  !important; }
+.ring-accent        { --tw-ring-color: var(--accent) !important; }
+.text-accent-soft   { color: var(--accent-soft)    !important; }
+.text-theme-primary { color: var(--text-primary)   !important; }
+.text-theme-secondary { color: var(--text-secondary) !important; }
+.bg-theme-card      { background: var(--bg-card)   !important; }
+.border-theme       { border-color: var(--border)  !important; }
+
+/* ═══════════════════════════════════════════════════════
+   INTERACTIVE ELEMENTS — estados hover/active globales
+   ✅ transform + opacity ONLY
+   ═══════════════════════════════════════════════════════ */
+
+/* Cualquier elemento clicable con role=button o button */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]) {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Links de navegación */
+a {
+  transition: opacity 100ms ease;
+}
+a:hover { opacity: 0.8; }
+a:focus-visible {
+  outline: none;
+  border-radius: 4px;
+  box-shadow: var(--focus-ring);
 }

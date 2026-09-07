@@ -11,6 +11,14 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == resourceOwnerId;
     }
 
+    // El campo ownerId identifica al dueño del documento y nunca debe poder
+    // cambiarse en un update (evita que un cliente manipulado reasigne sus
+    // propios documentos a otro uid, dejándolos huérfanos o inaccesibles,
+    // o que intente "donar" datos a otra cuenta saltándose el resto de reglas).
+    function keepsOwner() {
+      return request.resource.data.ownerId == resource.data.ownerId;
+    }
+
     // ------------------------------------------------------------
     // Perfil de usuario
     // ------------------------------------------------------------
@@ -32,7 +40,8 @@ service cloud.firestore {
     match /schoolYears/{yearId} {
       allow read: if isOwner(resource.data.ownerId);
       allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
-      allow update, delete: if isOwner(resource.data.ownerId);
+      allow update: if isOwner(resource.data.ownerId) && keepsOwner();
+      allow delete: if isOwner(resource.data.ownerId);
     }
 
     // ------------------------------------------------------------
@@ -41,7 +50,8 @@ service cloud.firestore {
     match /subjects/{subjectId} {
       allow read: if isOwner(resource.data.ownerId);
       allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
-      allow update, delete: if isOwner(resource.data.ownerId);
+      allow update: if isOwner(resource.data.ownerId) && keepsOwner();
+      allow delete: if isOwner(resource.data.ownerId);
     }
 
     // ------------------------------------------------------------
@@ -50,7 +60,8 @@ service cloud.firestore {
     match /timetableSlots/{slotId} {
       allow read: if isOwner(resource.data.ownerId);
       allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
-      allow update, delete: if isOwner(resource.data.ownerId);
+      allow update: if isOwner(resource.data.ownerId) && keepsOwner();
+      allow delete: if isOwner(resource.data.ownerId);
     }
 
     // ------------------------------------------------------------
@@ -59,7 +70,8 @@ service cloud.firestore {
     match /timeSlotDefs/{defId} {
       allow read: if isOwner(resource.data.ownerId);
       allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
-      allow update, delete: if isOwner(resource.data.ownerId);
+      allow update: if isOwner(resource.data.ownerId) && keepsOwner();
+      allow delete: if isOwner(resource.data.ownerId);
     }
 
     // ------------------------------------------------------------
@@ -68,7 +80,35 @@ service cloud.firestore {
     match /meetings/{meetingId} {
       allow read: if isOwner(resource.data.ownerId);
       allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
-      allow update, delete: if isOwner(resource.data.ownerId);
+      allow update: if isOwner(resource.data.ownerId) && keepsOwner();
+      allow delete: if isOwner(resource.data.ownerId);
+    }
+
+    // ------------------------------------------------------------
+    // Carpetas de reuniones
+    // ------------------------------------------------------------
+    match /meetingFolders/{folderId} {
+      allow read: if isOwner(resource.data.ownerId);
+      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update: if isOwner(resource.data.ownerId) && keepsOwner();
+      allow delete: if isOwner(resource.data.ownerId);
+    }
+
+    // ------------------------------------------------------------
+    // Mural: notas y enlaces de referencia, organizados en carpetas
+    // ------------------------------------------------------------
+    match /muralFolders/{folderId} {
+      allow read: if isOwner(resource.data.ownerId);
+      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update: if isOwner(resource.data.ownerId) && keepsOwner();
+      allow delete: if isOwner(resource.data.ownerId);
+    }
+
+    match /muralItems/{itemId} {
+      allow read: if isOwner(resource.data.ownerId);
+      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update: if isOwner(resource.data.ownerId) && keepsOwner();
+      allow delete: if isOwner(resource.data.ownerId);
     }
 
     // ------------------------------------------------------------
@@ -77,7 +117,33 @@ service cloud.firestore {
     match /weeklyPlans/{planId} {
       allow read: if isOwner(resource.data.ownerId);
       allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
-      allow update, delete: if isOwner(resource.data.ownerId);
+      allow update: if isOwner(resource.data.ownerId) && keepsOwner();
+      allow delete: if isOwner(resource.data.ownerId);
+    }
+
+    // ------------------------------------------------------------
+    // Situaciones de Aprendizaje (SA): agrupan sesiones de la
+    // programación semanal bajo un mismo hilo (objetivos, metodología,
+    // recursos, saberes, criterios de evaluación). Sin este bloque,
+    // Firestore deniega por defecto cualquier lectura/escritura de esta
+    // colección (no hay ningún match que la cubra), lo que rompía en
+    // silencio "Añadir a la programación semanal" desde Profi: al no
+    // poder crear/actualizar la SA, todo el guardado se abortaba.
+    // ------------------------------------------------------------
+    match /learningSituations/{situationId} {
+      allow read: if isOwner(resource.data.ownerId);
+      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update: if isOwner(resource.data.ownerId) && keepsOwner();
+      allow delete: if isOwner(resource.data.ownerId);
+    }
+
+    // Borradores de planificación de unidad de Profi (antes de incorporarlos
+    // a la programación semanal como Situación de Aprendizaje real).
+    match /profiUnitDrafts/{draftId} {
+      allow read: if isOwner(resource.data.ownerId);
+      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update: if isOwner(resource.data.ownerId) && keepsOwner();
+      allow delete: if isOwner(resource.data.ownerId);
     }
 
     // ------------------------------------------------------------
@@ -86,7 +152,8 @@ service cloud.firestore {
     match /curriculumItems/{itemId} {
       allow read: if isOwner(resource.data.ownerId);
       allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
-      allow update, delete: if isOwner(resource.data.ownerId);
+      allow update: if isOwner(resource.data.ownerId) && keepsOwner();
+      allow delete: if isOwner(resource.data.ownerId);
     }
 
     // ------------------------------------------------------------
@@ -95,13 +162,45 @@ service cloud.firestore {
     match /studentGroups/{groupId} {
       allow read: if isOwner(resource.data.ownerId);
       allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
-      allow update, delete: if isOwner(resource.data.ownerId);
+      allow update: if isOwner(resource.data.ownerId) && keepsOwner();
+      allow delete: if isOwner(resource.data.ownerId);
     }
 
     match /students/{studentId} {
       allow read: if isOwner(resource.data.ownerId);
       allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
-      allow update, delete: if isOwner(resource.data.ownerId);
+      allow update: if isOwner(resource.data.ownerId) && keepsOwner();
+      allow delete: if isOwner(resource.data.ownerId);
+    }
+
+    // ------------------------------------------------------------
+    // Anotaciones libres por alumno/a (apartado Alumnat)
+    // ------------------------------------------------------------
+    match /studentNotes/{noteId} {
+      allow read: if isOwner(resource.data.ownerId);
+      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update: if isOwner(resource.data.ownerId) && keepsOwner();
+      allow delete: if isOwner(resource.data.ownerId);
+    }
+
+    // ------------------------------------------------------------
+    // Listas de verificación por grupo de alumnos (apartado Alumnat)
+    // ------------------------------------------------------------
+    match /checklistBoards/{boardId} {
+      allow read: if isOwner(resource.data.ownerId);
+      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update: if isOwner(resource.data.ownerId) && keepsOwner();
+      allow delete: if isOwner(resource.data.ownerId);
+    }
+
+    // ------------------------------------------------------------
+    // Festivos del centro (independientes de la franja horaria)
+    // ------------------------------------------------------------
+    match /schoolHolidays/{holidayId} {
+      allow read: if isOwner(resource.data.ownerId);
+      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update: if isOwner(resource.data.ownerId) && keepsOwner();
+      allow delete: if isOwner(resource.data.ownerId);
     }
 
     // ------------------------------------------------------------
@@ -110,7 +209,82 @@ service cloud.firestore {
     match /commentTemplates/{templateId} {
       allow read: if isOwner(resource.data.ownerId);
       allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
-      allow update, delete: if isOwner(resource.data.ownerId);
+      allow update: if isOwner(resource.data.ownerId) && keepsOwner();
+      allow delete: if isOwner(resource.data.ownerId);
+    }
+
+    // ------------------------------------------------------------
+    // Rúbricas y notas
+    // ------------------------------------------------------------
+    match /rubrics/{rubricId} {
+      allow read: if isOwner(resource.data.ownerId);
+      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update: if isOwner(resource.data.ownerId) && keepsOwner();
+      allow delete: if isOwner(resource.data.ownerId);
+    }
+
+    match /gradeEntries/{entryId} {
+      allow read: if isOwner(resource.data.ownerId);
+      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update: if isOwner(resource.data.ownerId) && keepsOwner();
+      allow delete: if isOwner(resource.data.ownerId);
+    }
+
+    // ------------------------------------------------------------
+    // Adaptaciones curriculares por alumno/asignatura
+    // ------------------------------------------------------------
+    match /studentAdaptations/{adaptationId} {
+      allow read: if isOwner(resource.data.ownerId);
+      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update: if isOwner(resource.data.ownerId) && keepsOwner();
+      allow delete: if isOwner(resource.data.ownerId);
+    }
+
+    // ------------------------------------------------------------
+    // Libreta de notas: actividades evaluables y notas finales por trimestre
+    // ------------------------------------------------------------
+    match /gradebookActivities/{activityId} {
+      allow read: if isOwner(resource.data.ownerId);
+      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update: if isOwner(resource.data.ownerId) && keepsOwner();
+      allow delete: if isOwner(resource.data.ownerId);
+    }
+
+    match /termFinalGrades/{overrideId} {
+      // "resource == null" cubre el caso de leer un documento que todavía no
+      // existe (id determinista tipo "${subjectId}_${studentId}_${termId}",
+      // normal cuando el docente no ha hecho override todavía): sin esto,
+      // Firestore deniega el acceso al intentar evaluar resource.data en un
+      // documento inexistente, en vez de simplemente devolver "no existe".
+      allow read: if resource == null || isOwner(resource.data.ownerId);
+      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update: if isOwner(resource.data.ownerId) && keepsOwner();
+      allow delete: if isOwner(resource.data.ownerId);
+    }
+
+    // ------------------------------------------------------------
+    // Plantillas de comentario ligadas a la nota (una por asignatura y
+    // trimestre; el id del documento es `${subjectId}__${termId}`, o solo
+    // `subjectId` en documentos antiguos de antes de separar por trimestre)
+    // ------------------------------------------------------------
+    match /gradeCommentTemplates/{templateId} {
+      // Mismo motivo que en termFinalGrades: el documento no existe hasta
+      // que el docente configura su primera plantilla, así que hay que
+      // permitir leer "nada" sin denegar el acceso.
+      allow read: if resource == null || isOwner(resource.data.ownerId);
+      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update: if isOwner(resource.data.ownerId) && keepsOwner();
+      allow delete: if isOwner(resource.data.ownerId);
+    }
+
+    // ------------------------------------------------------------
+    // Tareas pendientes del docente
+    // ------------------------------------------------------------
+    match /teacherTasks/{taskId} {
+      allow read: if isOwner(resource.data.ownerId);
+      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+      allow update: if isOwner(resource.data.ownerId) && keepsOwner();
+      allow delete: if isOwner(resource.data.ownerId);
     }
   }
 }

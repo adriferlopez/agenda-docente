@@ -21,11 +21,21 @@ export default function DriveAttachmentPicker({ attachments, onChange }: Props) 
   const [name, setName] = useState('');
 
   function handleAdd() {
-    if (!url.trim()) return;
+    const trimmedUrl = url.trim();
+    if (!trimmedUrl) return;
+    // Solo aceptamos enlaces http(s): sin esto, alguien podría pegar una
+    // URL "javascript:..." que se ejecutaría al pulsar el enlace (el
+    // <a target="_blank"> de abajo la abriría tal cual).
+    try {
+      const parsed = new URL(trimmedUrl);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return;
+    } catch {
+      return;
+    }
     const attachment: DriveAttachment = {
       id: crypto.randomUUID(),
-      name: name.trim() || extractFileName(url) || 'Documento de Drive',
-      url: url.trim(),
+      name: name.trim() || extractFileName(trimmedUrl) || t('weekly.driveDocumentDefaultName'),
+      url: trimmedUrl,
     };
     onChange([...attachments, attachment]);
     setUrl('');
@@ -70,7 +80,7 @@ export default function DriveAttachmentPicker({ attachments, onChange }: Props) 
           className="flex-1"
         />
         <Input
-          placeholder="Nombre (opcional)"
+          placeholder={t('weekly.attachmentNamePlaceholder')}
           value={name}
           onChange={(e) => setName(e.target.value)}
           className="sm:w-48"

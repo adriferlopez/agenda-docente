@@ -6,7 +6,6 @@ import {
   deleteDoc,
   query,
   where,
-  orderBy,
   onSnapshot,
   serverTimestamp,
   type Unsubscribe,
@@ -24,26 +23,29 @@ export function subscribeMeetings(
   const q = query(
     collection(db, COL),
     where('ownerId', '==', ownerId),
-    where('schoolYearId', '==', schoolYearId),
-    orderBy('date', 'desc')
+    where('schoolYearId', '==', schoolYearId)
   );
   return onSnapshot(q, (snap) => {
-    const meetings = snap.docs.map((d) => {
-      const data = d.data();
-      return {
-        id: d.id,
-        ownerId: data.ownerId,
-        schoolYearId: data.schoolYearId,
-        title: data.title,
-        date: data.date,
-        notes: data.notes ?? '',
-        driveAttachments: data.driveAttachments ?? [],
-        summarySourceText: data.summarySourceText ?? '',
-        aiSummary: data.aiSummary,
-        createdAt: data.createdAt?.toMillis ? data.createdAt.toMillis() : Date.now(),
-        updatedAt: data.updatedAt?.toMillis ? data.updatedAt.toMillis() : Date.now(),
-      } as Meeting;
-    });
+    const meetings = snap.docs
+      .map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          ownerId: data.ownerId,
+          schoolYearId: data.schoolYearId,
+          title: data.title,
+          date: data.date,
+          notes: data.notes ?? '',
+          driveAttachments: data.driveAttachments ?? [],
+          summarySourceText: data.summarySourceText ?? '',
+          aiSummary: data.aiSummary,
+          time: data.time,
+          folderId: data.folderId ?? undefined,
+          createdAt: data.createdAt?.toMillis ? data.createdAt.toMillis() : Date.now(),
+          updatedAt: data.updatedAt?.toMillis ? data.updatedAt.toMillis() : Date.now(),
+        } as Meeting;
+      })
+      .sort((a, b) => b.date.localeCompare(a.date));
     callback(meetings);
   });
 }
@@ -71,8 +73,8 @@ export async function createMeeting(
 export async function updateMeeting(
   meetingId: string,
   data: Partial<
-    Pick<Meeting, 'title' | 'date' | 'notes' | 'driveAttachments' | 'summarySourceText' | 'aiSummary'>
-  >
+    Pick<Meeting, 'title' | 'date' | 'notes' | 'driveAttachments' | 'summarySourceText' | 'aiSummary' | 'time'>
+  > & { folderId?: string | null }
 ): Promise<void> {
   await updateDoc(doc(db, COL, meetingId), { ...data, updatedAt: serverTimestamp() });
 }

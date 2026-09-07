@@ -5,18 +5,33 @@ interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
 }
 
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(
-  ({ label, className = '', id, children, ...rest }, ref) => {
+  ({ label, className = '', id, children, style, ...rest }, ref) => {
     return (
-      <div className="flex flex-col gap-1.5">
+      <div className={`flex flex-col ${className}`}>
         {label && (
-          <label htmlFor={id} className="text-sm font-medium text-ink-soft">
+          <label
+            htmlFor={id}
+            style={{ fontSize: '0.8125rem', fontWeight: 500, color: 'var(--text-secondary)', display: 'block', marginBottom: '0.375rem' }}
+          >
             {label}
           </label>
         )}
         <select
           ref={ref}
           id={id}
-          className={`w-full rounded-2xl border border-lav-200 bg-white px-4 py-2.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-lav-300 transition ${className}`}
+          style={{
+            background: 'var(--bg-input)',
+            color: 'var(--text-primary)',
+            borderColor: 'var(--border-input)',
+            borderWidth: '1px',
+            borderStyle: 'solid',
+            borderRadius: '10px',
+            padding: '0.625rem 1rem',
+            fontSize: '0.875rem',
+            width: '100%',
+            outline: 'none',
+            ...style,
+          }}
           {...rest}
         >
           {children}

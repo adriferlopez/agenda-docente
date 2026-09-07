@@ -23,4 +23,16 @@ i18n
     interpolation: { escapeValue: false },
   });
 
+// El navegador solo revisa la ortografía con el diccionario del idioma
+// declarado en <html lang="...">. El HTML lo trae fijo en "es"; si no lo
+// sincronizamos aquí, un docente que use la app en catalán/euskera/gallego/
+// inglés tendría el corrector nativo del navegador revisando con el
+// diccionario equivocado (o sin diccionario), aunque los textarea tengan
+// spellCheck activado.
+function syncHtmlLang(lang: string) {
+  document.documentElement.lang = lang;
+}
+syncHtmlLang(i18n.resolvedLanguage ?? 'es');
+i18n.on('languageChanged', syncHtmlLang);
+
 export default i18n;

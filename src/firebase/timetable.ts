@@ -12,7 +12,7 @@ import {
   type Unsubscribe,
 } from 'firebase/firestore';
 import { db } from '@/firebase/config';
-import type { TimetableSlot, TimeSlotDef, WeekDay, SpecialSlotType } from '@/types';
+import type { TimetableSlot, TimeSlotDef, WeekDay, SpecialSlotType, SubjectColor } from '@/types';
 
 const COL = 'timetableSlots';
 const HOURS_COL = 'timeSlotDefs';
@@ -45,6 +45,7 @@ interface SlotInput {
   subjectId?: string;
   specialType?: SpecialSlotType;
   specialLabel?: string;
+  color?: SubjectColor;
 }
 
 export async function createTimetableSlot(
@@ -77,10 +78,13 @@ export async function updateTimetableSlot(slotId: string, data: SlotInput): Prom
     payload.subjectId = data.subjectId;
     payload.specialType = deleteField();
     payload.specialLabel = deleteField();
+    // El color de una franja de asignatura viene de Subject.color, no del slot.
+    payload.color = deleteField();
   } else {
     payload.subjectId = deleteField();
     payload.specialType = data.specialType;
     payload.specialLabel = data.specialLabel ?? deleteField();
+    payload.color = data.color ?? deleteField();
   }
 
   await updateDoc(doc(db, COL, slotId), payload);

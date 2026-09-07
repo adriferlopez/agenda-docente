@@ -65,6 +65,28 @@ export async function parseStudentsFile(file: File): Promise<StudentRow[]> {
     .filter((r) => r.firstName !== '' || r.lastName !== '');
 }
 
+/**
+ * Parsea una lista de alumnos pegada con Ctrl+V desde Excel/Word (una fila
+ * por alumno). Acepta tanto una lista de nombres completos en una sola
+ * "columna" pegada (una línea por alumno) como dos columnas (nombre y
+ * apellidos separados por tabulador, tal com los pega Excel al copiar un
+ * rango de dos columnas).
+ */
+export function parseStudentsText(text: string): StudentRow[] {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line !== '')
+    .map((line) => {
+      if (line.includes('\t')) {
+        const [firstName = '', lastName = ''] = line.split('\t').map((p) => p.trim());
+        return { firstName, lastName };
+      }
+      return splitFullName(line);
+    })
+    .filter((r) => r.firstName !== '' || r.lastName !== '');
+}
+
 function splitFullName(fullName: string): StudentRow {
   if (fullName.includes(',')) {
     // "Apellidos, Nombre"

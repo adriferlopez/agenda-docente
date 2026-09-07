@@ -2,28 +2,35 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import Button from '@/components/ui/Button';
 import { Input, Textarea } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Select';
 import Modal from '@/components/ui/Modal';
 import DriveAttachmentPicker from '@/components/weekly/DriveAttachmentPicker';
 import { IconTrash, IconSparkles, IconCheck } from '@/components/ui/icons';
 import { updateMeeting, deleteMeeting } from '@/firebase/meetings';
 import { summarizeMeeting } from '@/services/ai';
-import type { Meeting, DriveAttachment } from '@/types';
+import type { Meeting, DriveAttachment, MeetingFolder } from '@/types';
 
 interface Props {
   meeting: Meeting;
   language: string;
+  folders: MeetingFolder[];
   onClose: () => void;
 }
 
-export default function MeetingEditorModal({ meeting, language, onClose }: Props) {
+export default function MeetingEditorModal({ meeting, language, folders, onClose }: Props) {
   const { t } = useTranslation();
 
   const [title, setTitle] = useState(meeting.title);
   const [date, setDate] = useState(meeting.date);
+  // La hora es opcional (no todas las reuniones la necesitan): se muestra el
+  // campo solo si ya tenía una guardada o el docente pulsa "Añadir hora".
+  const [showTime, setShowTime] = useState(Boolean(meeting.time));
+  const [time, setTime] = useState(meeting.time ?? '');
   const [notes, setNotes] = useState(meeting.notes);
   const [attachments, setAttachments] = useState<DriveAttachment[]>(meeting.driveAttachments);
   const [summarySourceText, setSummarySourceText] = useState(meeting.summarySourceText);
   const [aiSummary, setAiSummary] = useState(meeting.aiSummary ?? '');
+  const [folderId, setFolderId] = useState(meeting.folderId ?? '');
 
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -35,10 +42,12 @@ export default function MeetingEditorModal({ meeting, language, onClose }: Props
       await updateMeeting(meeting.id, {
         title,
         date,
+        time: showTime ? time : '',
         notes,
         driveAttachments: attachments,
         summarySourceText,
         aiSummary,
+        folderId: folderId || null,
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -66,7 +75,7 @@ export default function MeetingEditorModal({ meeting, language, onClose }: Props
   return (
     <Modal open onClose={onClose} title={meeting.title || t('meetings.newMeeting')} widthClass="max-w-2xl">
       <div className="flex flex-col gap-4">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
           <Input
             label={t('meetings.meetingTitle')}
             value={title}
@@ -74,7 +83,42 @@ export default function MeetingEditorModal({ meeting, language, onClose }: Props
             className="sm:col-span-2"
           />
           <Input label={t('meetings.date')} type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          {showTime ? (
+            <div className="flex items-end gap-1">
+              <Input
+                label={t('meetings.time')}
+                type="time"
+                value={time}
+                onChange={(e) => setTime(e.target.value)}
+                className="flex-1"
+              />
+              <button
+                type="button"
+                onClick={() => { setShowTime(false); setTime(''); }}
+                className="text-ink-soft hover:text-rose-600 p-2.5 shrink-0"
+                aria-label={t('meetings.removeTime')}
+                title={t('meetings.removeTime')}
+              >
+                <IconTrash size={15} />
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-end">
+              <Button type="button" variant="secondary" size="sm" onClick={() => setShowTime(true)}>
+                {t('meetings.addTime')}
+              </Button>
+            </div>
+          )}
         </div>
+
+        {folders.length > 0 && (
+          <Select label={t('meetings.folder')} value={folderId} onChange={(e) => setFolderId(e.target.value)} className="max-w-xs">
+            <option value="">{t('meetings.noFolder')}</option>
+            {folders.map((f) => (
+              <option key={f.id} value={f.id}>{f.name}</option>
+            ))}
+          </Select>
+        )}
 
         <Textarea
           label={t('meetings.notes')}
@@ -105,8 +149,8 @@ export default function MeetingEditorModal({ meeting, language, onClose }: Props
         </div>
 
         {aiSummary && (
-          <div className="bg-lav-50 rounded-2xl p-3.5 flex flex-col gap-2">
-            <span className="text-xs font-semibold text-lav-600 flex items-center gap-1.5">
+          <div className="bg-accent-light rounded-2xl p-3.5 flex flex-col gap-2">
+            <span className="text-xs font-semibold text-accent flex items-center gap-1.5">
               <IconSparkles size={14} /> {t('meetings.aiSummary')}
             </span>
             <p className="text-sm text-ink whitespace-pre-wrap">{aiSummary}</p>

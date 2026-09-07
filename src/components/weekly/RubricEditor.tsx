@@ -9,16 +9,20 @@ interface Props {
   onChange: (rubric: RubricCriterion[]) => void;
 }
 
-const DEFAULT_LEVELS = ['Excelente', 'Adecuado', 'En proceso', 'Inicial'];
-
 export default function RubricEditor({ rubric, onChange }: Props) {
   const { t } = useTranslation();
+  const defaultLevels = [
+    t('grades.levelExcellent'),
+    t('grades.levelAdequate'),
+    t('grades.levelInProgress'),
+    t('grades.levelInitial'),
+  ];
 
   function addCriterion() {
     const criterion: RubricCriterion = {
       id: crypto.randomUUID(),
       description: '',
-      levels: DEFAULT_LEVELS.map((label, i) => ({ label, description: '', points: 4 - i })),
+      levels: defaultLevels.map((label, i) => ({ label, description: '', points: 4 - i })),
     };
     onChange([...rubric, criterion]);
   }
@@ -52,7 +56,7 @@ export default function RubricEditor({ rubric, onChange }: Props) {
             <Input
               value={criterion.description}
               onChange={(e) => updateCriterion(criterion.id, e.target.value)}
-              placeholder="Criterio de evaluación (ej. Trabajo en equipo)"
+              placeholder={t('grades.criterionPlaceholder')}
               className="flex-1"
             />
             <button
@@ -71,7 +75,7 @@ export default function RubricEditor({ rubric, onChange }: Props) {
                   value={level.description}
                   onChange={(e) => updateLevel(criterion.id, i, e.target.value)}
                   rows={2}
-                  className="w-full rounded-xl border border-lav-100 bg-lav-50/40 px-2 py-1.5 text-xs resize-none focus:outline-none focus:ring-2 focus:ring-lav-300"
+                  className="w-full rounded-xl border border-lav-100 bg-accent-light/40 px-2 py-1.5 text-xs resize-none focus:outline-none focus:ring-2 focus:ring-accent"
                 />
               </div>
             ))}

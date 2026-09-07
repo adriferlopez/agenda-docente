@@ -20,6 +20,11 @@ const DAYS: { value: WeekDay; key: string }[] = [
   { value: 4, key: 'timetable.friday' },
 ];
 
+function toMinutes(hhmm: string): number {
+  const [h, m] = hhmm.split(':').map((n) => parseInt(n, 10) || 0);
+  return h * 60 + m;
+}
+
 interface Props {
   open: boolean;
   onClose: () => void;
@@ -35,7 +40,11 @@ export default function HourSlotManagerModal({ open, onClose, day, defs, ownerId
   const [applyDays, setApplyDays] = useState<WeekDay[]>([]);
   const [applied, setApplied] = useState(false);
 
-  const dayDefs = defs.filter((d) => d.day === day).sort((a, b) => a.order - b.order);
+  // Ordenadas cronológicamente por hora de inicio (no por el campo `order`,
+  // que solo refleja el orden de creación): así, al escribir una hora de
+  // inicio distinta en una franja existente, la lista se reordena sola en
+  // vez de quedarse "congelada" en la posición donde se creó.
+  const dayDefs = defs.filter((d) => d.day === day).sort((a, b) => toMinutes(a.startTime) - toMinutes(b.startTime));
 
   async function handleAdd() {
     const last = dayDefs[dayDefs.length - 1];
@@ -125,8 +134,8 @@ export default function HourSlotManagerModal({ open, onClose, day, defs, ownerId
                   onClick={() => toggleApplyDay(d.value)}
                   className={`text-xs font-semibold rounded-full px-3 py-1.5 border transition ${
                     applyDays.includes(d.value)
-                      ? 'bg-lav-400 text-white border-lav-400'
-                      : 'bg-white text-ink-soft border-lav-200 hover:bg-lav-50'
+                      ? 'bg-accent text-white border-accent'
+                      : 'bg-theme-card text-ink-soft border-theme hover:bg-accent-light'
                   }`}
                 >
                   {t(d.key)}

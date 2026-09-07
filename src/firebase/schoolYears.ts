@@ -29,6 +29,7 @@ export function subscribeSchoolYears(
         name: data.name,
         startDate: data.startDate,
         endDate: data.endDate,
+        terms: data.terms,
         createdAt: data.createdAt?.toMillis ? data.createdAt.toMillis() : Date.now(),
       } as SchoolYear;
     });
@@ -50,4 +51,9 @@ export async function createSchoolYear(
 
 export async function setActiveSchoolYear(uid: string, schoolYearId: string): Promise<void> {
   await updateDoc(doc(db, 'users', uid), { activeSchoolYearId: schoolYearId });
+}
+
+/** Guarda los periodos de evaluación (trimestres) personalizados de un curso. */
+export async function updateSchoolYearTerms(schoolYearId: string, terms: SchoolYear['terms']): Promise<void> {
+  await updateDoc(doc(db, COL, schoolYearId), { terms: terms ?? [] });
 }
