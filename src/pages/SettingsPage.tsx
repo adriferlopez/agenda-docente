@@ -436,10 +436,14 @@ function SecurityCard() {
       setCurrentPassword('');
     } catch (err) {
       const code = (err as { code?: string })?.code ?? '';
+      // "auth/email-already-in-use" deliberadamente NO tiene su propio mensaje:
+      // decir explícitamente "ese correo ya está en uso" permitiría a
+      // cualquier cuenta ya registrada comprobar si un email concreto tiene
+      // cuenta en la app, probando a "cambiarse" a él (enumeración de
+      // cuentas). Con el mensaje genérico de abajo, el resultado se ve igual
+      // exista o no esa cuenta.
       if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
         setEmailError(t('settings.changeEmailWrongPassword'));
-      } else if (code === 'auth/email-already-in-use') {
-        setEmailError(t('settings.changeEmailInUse'));
       } else if (code === 'auth/invalid-email') {
         setEmailError(t('settings.changeEmailInvalid'));
       } else {

@@ -1198,11 +1198,20 @@ export const reportIssue = onCall(
 // pedir la contraseña de nuevo o reautenticar con Google antes de
 // poder borrar. Con una función admin no hace falta nada de eso: basta
 // con que la persona esté conectada ahora mismo.
+// Debe cubrir TODAS las colecciones con campo ownerId de firestore.rules (se
+// añadieron aquí a posteriori: originalmente faltaban meetingFolders,
+// muralFolders, muralItems, learningSituations, profiUnitDrafts,
+// studentNotes, checklistBoards y schoolHolidays, lo que dejaba esos datos
+// -incluidas observaciones sensibles de alumnos en studentNotes- huérfanos
+// en Firestore tras eliminar la cuenta).
 const OWNED_COLLECTIONS = [
-  'subjects', 'teacherTasks', 'meetings', 'schoolYears', 'timetableSlots',
-  'timeSlotDefs', 'weeklyPlans', 'curriculumItems', 'rubrics', 'gradeEntries',
+  'subjects', 'teacherTasks', 'meetings', 'meetingFolders', 'schoolYears',
+  'timetableSlots', 'timeSlotDefs', 'weeklyPlans', 'learningSituations',
+  'profiUnitDrafts', 'curriculumItems', 'rubrics', 'gradeEntries',
   'commentTemplates', 'gradeCommentTemplates', 'termFinalGrades',
-  'gradebookActivities', 'studentGroups', 'students', 'studentAdaptations',
+  'gradebookActivities', 'studentGroups', 'students', 'studentNotes',
+  'studentAdaptations', 'checklistBoards', 'schoolHolidays', 'muralFolders',
+  'muralItems',
 ];
 
 export const deleteAccount = onCall({ region: REGION, enforceAppCheck: false }, async (request) => {
