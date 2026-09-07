@@ -15,6 +15,7 @@ import { subscribeTasks, setTaskDone } from '@/firebase/tasks';
 import { subscribeFavoriteMuralItems, updateMuralFavoritesOrder } from '@/firebase/murals';
 import { subscribeMuralFolders } from '@/firebase/muralFolders';
 import { getWeekStart, formatWeekLabel, isoDateForDayInWeek } from '@/utils/dates';
+import { isSafeHttpUrl } from '@/utils/url';
 import Card from '@/components/ui/Card';
 import FitText from '@/components/ui/FitText';
 import { subjectColorClasses, styledSubjectCell } from '@/components/ui/subjectColors';
@@ -709,7 +710,7 @@ function MuralWidget({ items, folderById, configuring, t }: {
   }
 
   function handleClick(item: MuralItem) {
-    if (item.linkUrl) {
+    if (item.linkUrl && isSafeHttpUrl(item.linkUrl)) {
       window.open(item.linkUrl, '_blank', 'noopener,noreferrer');
     }
   }

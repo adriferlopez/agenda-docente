@@ -4,6 +4,7 @@ import { IconEdit } from '@/components/ui/icons';
 import { IconStar, IconLink, IconFolder } from '@/components/ui/icons-extra';
 import { subjectColorClasses } from '@/components/ui/subjectColors';
 import { setMuralFavorite, updateMuralItem } from '@/firebase/murals';
+import { isSafeHttpUrl } from '@/utils/url';
 import type { MuralItem, MuralFolder } from '@/types';
 
 interface Props {
@@ -27,7 +28,7 @@ export default function MuralItemCard({ item, folder, folders, favoritesCount, o
   const [moveOpen, setMoveOpen] = useState(false);
 
   function handleCardClick() {
-    if (item.linkUrl) {
+    if (item.linkUrl && isSafeHttpUrl(item.linkUrl)) {
       window.open(item.linkUrl, '_blank', 'noopener,noreferrer');
     } else {
       onEdit();
