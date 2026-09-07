@@ -6,6 +6,7 @@ import { defineSecret } from 'firebase-functions/params';
 import nodemailer from 'nodemailer';
 import { encryptApiKey } from './crypto.js';
 import { generateText, generateTextWithPdf, languageName, subjectLabel } from './gemini.js';
+import { ThinkingLevel } from '@google/genai';
 
 initializeApp();
 
@@ -626,12 +627,15 @@ Docente: ${lastMessage?.content ?? ''}
 
 Profi:`;
 
-    // Chat conversacional: se desactiva el "thinking" del modelo (no hace
+    // Chat conversacional: se minimiza el "thinking" del modelo (no hace
     // falta razonamiento profundo para responder o redactar una propuesta
     // de clase) y se acota la longitud de salida, para responder más rápido
     // y evitar acercarse al límite de tiempo de la llamada.
+    // Nota: gemini-3.6-flash usa "thinkingLevel" (MINIMAL/LOW/MEDIUM/HIGH),
+    // no "thinkingBudget" (ese era el parámetro de la serie 2.5 y con los
+    // modelos 3.x provoca un 400 INVALID_ARGUMENT).
     const reply = await generateText(uid, fullPrompt, {
-      thinkingConfig: { thinkingBudget: 0 },
+      thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
       maxOutputTokens: 4096,
     });
     return { reply };
@@ -1450,7 +1454,7 @@ También propón:
 
 Responde en ${lang}. Responde ÚNICAMENTE con un JSON válido de la forma {"unitLabel": "...", "sessions": [{"phase": "...", "title": "...", "description": "...", "ceIds": ["..."], "isEvaluated": true, "evaluationName": "..."}], "rubricCopyText": "..."}, con el array "sessions" con EXACTAMENTE ${sessionCount} elementos en orden (inicio primero, síntesis al final). Sin texto adicional ni bloques de código markdown envolviendo el JSON.`;
 
-    // Sin acotar thinkingBudget/maxOutputTokens (a diferencia del chat, ver
+    // Sin acotar el "thinking"/maxOutputTokens (a diferencia del chat, ver
     // línea ~633), este modelo "piensa" con presupuesto dinámico/sin límite
     // explícito antes de responder. Con un JSON tan grande (hasta 20
     // sesiones detalladas + una rúbrica completa), eso disparaba la
@@ -1458,11 +1462,13 @@ Responde en ${lang}. Responde ÚNICAMENTE con un JSON válido de la forma {"unit
     // el presupuesto de salida por defecto, el JSON final llegaba cortado a
     // medias — parseJsonResponse fallaba y el docente veía un error
     // "Internal" genérico sin que hubiera ningún problema con su clave ni
-    // con la petición en sí. Acotar ambos valores explícitamente (bastante
-    // margen para razonar bien, pero con techo) hace la respuesta más
-    // rápida y fiable, sin arriesgarse a truncar el JSON.
+    // con la petición en sí. MEDIUM da margen para razonar bien sin
+    // dispararse, y el techo de maxOutputTokens evita el truncado del JSON.
+    // Nota: gemini-3.6-flash usa "thinkingLevel", no "thinkingBudget" (ver
+    // también línea ~638) — con "thinkingBudget" la API devuelve 400
+    // INVALID_ARGUMENT.
     const raw = await generateText(uid, prompt, {
-      thinkingConfig: { thinkingBudget: 4096 },
+      thinkingConfig: { thinkingLevel: ThinkingLevel.MEDIUM },
       maxOutputTokens: 16384,
     });
     try {
