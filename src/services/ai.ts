@@ -27,39 +27,41 @@ export async function generateWeeklySuggestions(input: GenerateSuggestionsInput)
   return res.data.suggestions;
 }
 
-interface GenerateObjectivesInput {
-  subjectName: string;
-  courseLevel?: string;
-  activityTitle: string;
+// --- Generación en lote de objetivos + saberes para varias actividades a la
+// vez (retrofit de actividades que no se crearon con el planificador de
+// unidad de Profi, que ya genera estos campos directamente). Sustituye a las
+// antiguas generateActivityObjectives/matchCurriculumItems, que hacían una
+// llamada a Gemini por cada actividad. ---
+
+export interface ActivityObjectivesAndSabersInput {
+  index: number;
+  title: string;
   description: string;
-  language: string;
 }
 
-export async function generateActivityObjectives(input: GenerateObjectivesInput): Promise<string> {
-  const fn = httpsCallable<GenerateObjectivesInput, { objectives: string }>(
-    functions,
-    'generateActivityObjectives'
-  );
-  const res = await fn(input);
-  return res.data.objectives;
-}
-
-interface MatchCurriculumInput {
+interface GenerateActivitiesObjectivesAndSabersInput {
   subjectName: string;
   courseLevel?: string;
-  activityTitle: string;
-  description: string;
+  activities: ActivityObjectivesAndSabersInput[];
   curriculumItems: { id: string; code: string; description: string }[];
   language: string;
 }
 
-export async function matchCurriculumItems(input: MatchCurriculumInput): Promise<string[]> {
-  const fn = httpsCallable<MatchCurriculumInput, { curriculumItemIds: string[] }>(
+export interface ActivityObjectivesAndSabersResult {
+  index: number;
+  objectives: string;
+  curriculumItemIds: string[];
+}
+
+export async function generateActivitiesObjectivesAndSabers(
+  input: GenerateActivitiesObjectivesAndSabersInput
+): Promise<ActivityObjectivesAndSabersResult[]> {
+  const fn = httpsCallable<GenerateActivitiesObjectivesAndSabersInput, { results: ActivityObjectivesAndSabersResult[] }>(
     functions,
-    'matchCurriculumItems'
+    'generateActivitiesObjectivesAndSabers'
   );
   const res = await fn(input);
-  return res.data.curriculumItemIds;
+  return res.data.results;
 }
 
 // --- Situaciones de Aprendizaje: objetivos generales y metodología/recursos ---
@@ -474,6 +476,7 @@ interface PlanLearningUnitArgs {
   courseLevel?: string;
   sessionCount: number;
   competencies: PlanUnitCompetencyInput[];
+  curriculumItems?: { id: string; code: string; description: string }[];
   contentsToWorkOn?: string;
   threadIdea?: string;
   methodologies: string[];
@@ -489,6 +492,8 @@ export interface PlannedUnitSession {
   title: string;
   description: string;
   ceIds: string[];
+  objectives: string;
+  curriculumItemIds: string[];
   isEvaluated: boolean;
   evaluationName?: string;
 }
@@ -499,13 +504,13 @@ export interface PlannedLearningUnit {
 }
 
 export async function planLearningUnit(args: PlanLearningUnitArgs): Promise<PlannedLearningUnit> {
-  // Es la generación más pesada de toda la app (hasta 20 sesiones completas),
-  // así que necesita más margen que el resto de
-  // llamadas a Profi: el timeout del cliente debe ser mayor que el
-  // `timeoutSeconds` del servidor (ver functions/src/index.ts) para que sea
-  // siempre el servidor quien corte primero con un error legible, en vez de
-  // que Cloud Run mate la conexión a medio respuesta (lo que el navegador
-  // reporta erróneamente como un bloqueo de CORS).
+  // Es la generación más pesada de toda la app (hasta 15 sesiones completas,
+  // cada una con sus objetivos y saberes asignados), así que necesita más
+  // margen que el resto de llamadas a Profi: el timeout del cliente debe ser
+  // mayor que el `timeoutSeconds` del servidor (ver functions/src/index.ts)
+  // para que sea siempre el servidor quien corte primero con un error
+  // legible, en vez de que Cloud Run mate la conexión a medio respuesta (lo
+  // que el navegador reporta erróneamente como un bloqueo de CORS).
   const fn = httpsCallable<PlanLearningUnitArgs, PlannedLearningUnit>(functions, 'planLearningUnit', { timeout: 260_000 });
   const res = await fn(args);
   return res.data;

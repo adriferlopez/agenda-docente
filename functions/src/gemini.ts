@@ -129,7 +129,7 @@ export async function generateText(uid: string, prompt: string, config?: Generat
  * necesidad de extraer el texto nosotros mismos primero — así también
  * "ve" tablas, esquemas o imágenes del documento).
  */
-export async function generateTextWithPdf(uid: string, prompt: string, pdfBase64: string): Promise<string> {
+export async function generateTextWithPdf(uid: string, prompt: string, pdfBase64: string, config?: GenerateContentConfig): Promise<string> {
   if (prompt.length > MAX_PROMPT_CHARS) {
     throw new HttpsError('invalid-argument', 'El texto es demasiado largo para procesarlo.');
   }
@@ -146,6 +146,7 @@ export async function generateTextWithPdf(uid: string, prompt: string, pdfBase64
           { text: prompt },
           { inlineData: { mimeType: 'application/pdf', data: pdfBase64 } },
         ],
+        ...(config ? { config } : {}),
       })
     );
     return (response.text ?? '').trim();

@@ -16,9 +16,9 @@ import {
   updateLearningSituation,
   createLearningSituation,
 } from '@/firebase/learningSituations';
-import { generateActivityObjectives, matchCurriculumItems, generateSaObjectives, generateSaMethodologyResources, classifyAiError } from '@/services/ai';
+import { generateActivitiesObjectivesAndSabers, generateSaObjectives, generateSaMethodologyResources, classifyAiError } from '@/services/ai';
 import { getCurriculumForSubject, COURSE_LEVELS_BY_ETAPA } from '@/data/curriculum';
-import type { Etapa, Comunitat, EtapaCurriculum } from '@/data/curriculum/types';
+import type { Etapa, Comunitat } from '@/data/curriculum/types';
 import { getEffectiveTerms, termForDate } from '@/utils/terms';
 import { driveImagePreviewUrl } from '@/utils/drive';
 import { getWeekStart, shiftWeek, isoDateForDayInWeek, formatWeekLabel } from '@/utils/dates';
@@ -35,41 +35,7 @@ import { IconSparkles, IconDownload, IconImage, IconTrash, IconEdit, IconRefresh
 import { IconCopy } from '@/components/ui/icons-extra';
 import type { Subject, WeeklyPlan, Rubric, LearningSituation, TimetableSlot } from '@/types';
 import { getEffectiveEtapas } from '@/types';
-
-/** Un "saber" (contenido) del currículum, en el formato que necesita el
- * emparejamiento por IA (id/code/description). Se construye en el cliente a
- * partir de los blocs de sabers de las àrees vinculadas a cada asignatura
- * (data/curriculum), no de una colección de Firestore: así siempre refleja
- * el currículum oficial cargado en la app, sin depender de que el docente
- * haya importado nada manualmente.
- */
-interface SaberItem {
-  id: string;
-  code: string;
-  description: string;
-}
-
-function getSubjectSaberItems(subject: Subject, curriculum: EtapaCurriculum | null): SaberItem[] {
-  if (!curriculum) return [];
-  const items: SaberItem[] = [];
-  for (const areaName of subject.curriculumAreas ?? []) {
-    const area = curriculum.areas[areaName];
-    if (!area) continue;
-    for (const [bloc, byCourse] of Object.entries(area.blocs)) {
-      for (const [courseKey, sabers] of Object.entries(byCourse)) {
-        const courseLabel = area.courseLabels[courseKey] ?? courseKey;
-        sabers.forEach((text, idx) => {
-          items.push({
-            id: `${areaName}::${bloc}::${courseKey}::${idx}`,
-            code: `${bloc} · ${courseLabel}`,
-            description: text,
-          });
-        });
-      }
-    }
-  }
-  return items;
-}
+import { getSubjectSaberItems, type SaberItem } from '@/utils/subjectSabers';
 
 /** CE (id + nombre) derivadas de la rúbrica vinculada a una actividad, deduplicadas. */
 interface ActivityCe {
@@ -251,53 +217,50 @@ export default function AnnualPlanningPage() {
 
   const effectiveTerms = useMemo(() => (activeYear ? getEffectiveTerms(activeYear) : []), [activeYear]);
 
-  async function handleGenerateObjectives(plan: WeeklyPlan) {
-    const subject = subjectById.get(plan.subjectId);
-    if (!subject) return;
-    setGeneratingId(plan.id + '-obj');
-    setSaActionError(null);
-    try {
-      const objectives = await generateActivityObjectives({
-        subjectName: subject.name,
-        courseLevel: subject.courseLevel,
-        activityTitle: plan.title,
-        description: plan.description,
-        language: profile?.language ?? 'es',
-      });
-      await updatePlanCurriculumAndObjectives(plan.id, { aiObjectives: objectives });
-      setPlans((prev) => prev?.map((p) => (p.id === plan.id ? { ...p, aiObjectives: objectives } : p)) ?? null);
-    } catch (err) {
-      console.error('Error generando objetivos de actividad con Profi:', err);
-      const kind = classifyAiError(err);
-      setSaActionError(
-        kind === 'quota' ? t('common.aiQuotaError')
-          : kind === 'overloaded' ? t('common.aiOverloadError')
-          : t('annual.saActionError')
-      );
-    } finally {
-      setGeneratingId(null);
-    }
-  }
+  // Actividades de la asignatura seleccionada que aún no tienen ni objetivos
+  // ni saberes asignados (normalmente porque no se crearon con el
+  // planificador de unidad de Profi, que ya los genera en la misma llamada
+  // que planifica las sesiones). El botón bulk de abajo las completa todas
+  // de una vez, en una sola llamada a Gemini.
+  const pendingObjectivesAndSabers = useMemo(
+    () => subjectPlans.filter((p) => !p.aiObjectives && (!p.curriculumItemIds || p.curriculumItemIds.length === 0)),
+    [subjectPlans]
+  );
 
-  async function handleMatchCurriculum(plan: WeeklyPlan) {
-    const subject = subjectById.get(plan.subjectId);
-    const items = curriculumBySubject.get(plan.subjectId) ?? [];
-    if (!subject || items.length === 0) return;
-    setGeneratingId(plan.id + '-curr');
+  const BULK_OBJECTIVES_SABERS_KEY = 'bulk-objectives-sabers';
+
+  async function handleGenerateObjectivesAndSabers() {
+    const subject = subjectById.get(selectedSubjectId);
+    if (!subject || pendingObjectivesAndSabers.length === 0) return;
+    const items = curriculumBySubject.get(selectedSubjectId) ?? [];
+    setGeneratingId(BULK_OBJECTIVES_SABERS_KEY);
     setSaActionError(null);
     try {
-      const ids = await matchCurriculumItems({
+      const results = await generateActivitiesObjectivesAndSabers({
         subjectName: subject.name,
         courseLevel: subject.courseLevel,
-        activityTitle: plan.title,
-        description: plan.description,
+        activities: pendingObjectivesAndSabers.map((p, i) => ({ index: i, title: p.title, description: p.description })),
         curriculumItems: items.map((i) => ({ id: i.id, code: i.code, description: i.description })),
         language: profile?.language ?? 'es',
       });
-      await updatePlanCurriculumAndObjectives(plan.id, { curriculumItemIds: ids });
-      setPlans((prev) => prev?.map((p) => (p.id === plan.id ? { ...p, curriculumItemIds: ids } : p)) ?? null);
+      const byPlanId = new Map<string, { objectives: string; curriculumItemIds: string[] }>();
+      results.forEach((r) => {
+        const plan = pendingObjectivesAndSabers[r.index];
+        if (plan) byPlanId.set(plan.id, { objectives: r.objectives, curriculumItemIds: r.curriculumItemIds });
+      });
+      await Promise.all(
+        Array.from(byPlanId.entries()).map(([planId, r]) =>
+          updatePlanCurriculumAndObjectives(planId, { aiObjectives: r.objectives, curriculumItemIds: r.curriculumItemIds })
+        )
+      );
+      setPlans((prev) =>
+        prev?.map((p) => {
+          const r = byPlanId.get(p.id);
+          return r ? { ...p, aiObjectives: r.objectives, curriculumItemIds: r.curriculumItemIds } : p;
+        }) ?? null
+      );
     } catch (err) {
-      console.error('Error emparejando currículum con Profi:', err);
+      console.error('Error generando objetivos y saberes en lote con Profi:', err);
       const kind = classifyAiError(err);
       setSaActionError(
         kind === 'quota' ? t('common.aiQuotaError')
@@ -434,6 +397,16 @@ export default function AnnualPlanningPage() {
           <p className="text-sm text-ink-soft">{t('annual.subtitle')}</p>
         </div>
         <div className="flex gap-2 flex-wrap">
+          {pendingObjectivesAndSabers.length > 0 && (
+            <Button
+              variant="secondary"
+              onClick={handleGenerateObjectivesAndSabers}
+              disabled={generatingId === BULK_OBJECTIVES_SABERS_KEY}
+              icon={<IconSparkles size={16} />}
+            >
+              {generatingId === BULK_OBJECTIVES_SABERS_KEY ? t('common.loading') : t('annual.generateObjectivesAndSabers')}
+            </Button>
+          )}
           <Button
             variant="secondary"
             onClick={() => handleExportPdf('subject')}
@@ -529,15 +502,7 @@ export default function AnnualPlanningPage() {
                           {plan.aiObjectives ? (
                             <p className="text-sm text-ink whitespace-pre-wrap">{plan.aiObjectives}</p>
                           ) : (
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() => handleGenerateObjectives(plan)}
-                              disabled={generatingId === plan.id + '-obj'}
-                              icon={<IconSparkles size={14} />}
-                            >
-                              {generatingId === plan.id + '-obj' ? t('common.loading') : t('annual.generateObjectives')}
-                            </Button>
+                            <p className="text-sm text-ink-soft italic">{t('annual.objectivesNotGenerated')}</p>
                           )}
                         </div>
 
@@ -553,18 +518,7 @@ export default function AnnualPlanningPage() {
                               ))}
                             </ul>
                           ) : (
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() => handleMatchCurriculum(plan)}
-                              disabled={
-                                generatingId === plan.id + '-curr' ||
-                                (curriculumBySubject.get(plan.subjectId) ?? []).length === 0
-                              }
-                              icon={<IconSparkles size={14} />}
-                            >
-                              {generatingId === plan.id + '-curr' ? t('common.loading') : t('annual.matchCurriculum')}
-                            </Button>
+                            <p className="text-sm text-ink-soft italic">{t('annual.curriculumNotGenerated')}</p>
                           )}
                         </div>
 
@@ -638,9 +592,7 @@ export default function AnnualPlanningPage() {
       {editingPlan && subjectById.get(editingPlan.subjectId) && (
         <EditPlanModal
           plan={editingPlan}
-          subject={subjectById.get(editingPlan.subjectId)!}
           saberItems={curriculumBySubject.get(editingPlan.subjectId) ?? []}
-          language={profile?.language ?? 'es'}
           onClose={() => setEditingPlan(null)}
           onSaved={(data) => {
             setPlans((prev) => prev?.map((p) => (p.id === editingPlan.id ? { ...p, ...data } : p)) ?? null);
@@ -947,12 +899,10 @@ function SaTextField({ label, value, onSave, onGenerate, generating, onCollect, 
 // automática (siguen disponibles como botones dentro del propio modal).
 // -----------------------------------------------------------------------
 function EditPlanModal({
-  plan, subject, saberItems, language, onClose, onSaved,
+  plan, saberItems, onClose, onSaved,
 }: {
   plan: WeeklyPlan;
-  subject: Subject;
   saberItems: SaberItem[];
-  language: string;
   onClose: () => void;
   onSaved: (data: { aiObjectives?: string; curriculumItemIds?: string[]; referenceImageUrl?: string }) => void;
 }) {
@@ -961,62 +911,10 @@ function EditPlanModal({
   const [imgError, setImgError] = useState(false);
   const [objectives, setObjectives] = useState(plan.aiObjectives ?? '');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set(plan.curriculumItemIds ?? []));
-  const [generatingObjectives, setGeneratingObjectives] = useState(false);
-  const [matchingSaberes, setMatchingSaberes] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
   const previewUrl = imageUrl.trim() ? driveImagePreviewUrl(imageUrl.trim()) : '';
-
-  async function handleGenerateObjectives() {
-    setGeneratingObjectives(true);
-    setError('');
-    try {
-      const result = await generateActivityObjectives({
-        subjectName: subject.name,
-        courseLevel: subject.courseLevel,
-        activityTitle: plan.title,
-        description: plan.description,
-        language,
-      });
-      setObjectives(result);
-    } catch (err) {
-      const kind = classifyAiError(err);
-      setError(
-        kind === 'quota' ? t('common.aiQuotaError')
-          : kind === 'overloaded' ? t('common.aiOverloadError')
-          : t('common.error')
-      );
-    } finally {
-      setGeneratingObjectives(false);
-    }
-  }
-
-  async function handleMatchSaberes() {
-    if (saberItems.length === 0) return;
-    setMatchingSaberes(true);
-    setError('');
-    try {
-      const ids = await matchCurriculumItems({
-        subjectName: subject.name,
-        courseLevel: subject.courseLevel,
-        activityTitle: plan.title,
-        description: plan.description,
-        curriculumItems: saberItems.map((i) => ({ id: i.id, code: i.code, description: i.description })),
-        language,
-      });
-      setSelectedIds(new Set(ids));
-    } catch (err) {
-      const kind = classifyAiError(err);
-      setError(
-        kind === 'quota' ? t('common.aiQuotaError')
-          : kind === 'overloaded' ? t('common.aiOverloadError')
-          : t('common.error')
-      );
-    } finally {
-      setMatchingSaberes(false);
-    }
-  }
 
   async function handleSave() {
     setSaving(true);
@@ -1065,36 +963,12 @@ function EditPlanModal({
         </div>
 
         <div>
-          <div className="flex items-center justify-between mb-1.5 flex-wrap gap-2">
-            <label className="text-sm font-medium text-ink">{t('annual.objectives')}</label>
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={handleGenerateObjectives}
-              disabled={generatingObjectives}
-              icon={<IconSparkles size={14} />}
-            >
-              {generatingObjectives ? t('common.loading') : t('annual.generateObjectives')}
-            </Button>
-          </div>
+          <label className="text-sm font-medium text-ink block mb-1.5">{t('annual.objectives')}</label>
           <Textarea value={objectives} onChange={(e) => setObjectives(e.target.value)} rows={3} />
         </div>
 
         <div>
-          <div className="flex items-center justify-between mb-1.5 flex-wrap gap-2">
-            <label className="text-sm font-medium text-ink">{t('annual.curriculum')}</label>
-            {saberItems.length > 0 && (
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={handleMatchSaberes}
-                disabled={matchingSaberes}
-                icon={<IconSparkles size={14} />}
-              >
-                {matchingSaberes ? t('common.loading') : t('annual.matchCurriculum')}
-              </Button>
-            )}
-          </div>
+          <label className="text-sm font-medium text-ink block mb-1.5">{t('annual.curriculum')}</label>
           {saberItems.length === 0 ? (
             <p className="text-xs text-ink-soft">{t('annual.saberesEmpty')}</p>
           ) : (

@@ -104,6 +104,8 @@ export async function upsertWeeklyPlan(
     status: WeeklyPlan['status'];
     saLabel: string;
     saId: string;
+    aiObjectives: string;
+    curriculumItemIds: string[];
   }>
 ): Promise<string> {
   const id = weeklyPlanId(timetableSlotId, weekStartDate);

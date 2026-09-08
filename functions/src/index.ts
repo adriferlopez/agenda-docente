@@ -103,97 +103,12 @@ Evaluación posterior del docente: ${input.postClassEvaluation}
 Responde en ${languageName(input.language)}, en un tono cercano y profesional.
 Da entre 2 y 4 sugerencias concretas y breves (en formato de lista, sin numerar) para mejorar esta actividad de cara al próximo curso, teniendo en cuenta la evaluación del docente. No repitas la información ya dada, céntrate en propuestas de mejora accionables.`;
 
-    const suggestions = await generateText(uid, prompt);
+    // Redacción breve (2-4 sugerencias): no hace falta razonamiento profundo.
+    const suggestions = await generateText(uid, prompt, {
+      thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+      maxOutputTokens: 1024,
+    });
     return { suggestions };
-  }
-);
-
-// ---------------------------------------------------------------------
-// Generación de objetivos de aprendizaje para la programación anual
-// ---------------------------------------------------------------------
-
-interface GenerateObjectivesInput {
-  subjectName: string;
-  courseLevel?: string;
-  activityTitle: string;
-  description: string;
-  language: string;
-}
-
-export const generateActivityObjectives = onCall(
-  { region: REGION, secrets: [geminiEncryptionKey], enforceAppCheck: false },
-  async (request) => {
-    const uid = requireAuth(request.auth?.uid);
-    const input = request.data as GenerateObjectivesInput;
-
-    const prompt = `Eres un experto en diseño curricular educativo.
-
-Asignatura: ${subjectLabel(input.subjectName, input.courseLevel)}
-Actividad: ${input.activityTitle}
-Descripción: ${input.description}
-
-Responde en ${languageName(input.language)}.
-Redacta entre 2 y 3 objetivos de aprendizaje claros y concisos para esta actividad, adecuados al nivel educativo indicado. Sepáralos con saltos de línea, sin numerar ni usar viñetas, usando un lenguaje propio de una programación didáctica.`;
-
-    const objectives = await generateText(uid, prompt);
-    return { objectives };
-  }
-);
-
-// ---------------------------------------------------------------------
-// Asignación de saberes del currículum a una actividad
-// ---------------------------------------------------------------------
-
-interface MatchCurriculumInput {
-  subjectName: string;
-  courseLevel?: string;
-  activityTitle: string;
-  description: string;
-  curriculumItems: { id: string; code: string; description: string }[];
-  language: string;
-}
-
-export const matchCurriculumItems = onCall(
-  { region: REGION, secrets: [geminiEncryptionKey], enforceAppCheck: false },
-  async (request) => {
-    const uid = requireAuth(request.auth?.uid);
-    const input = request.data as MatchCurriculumInput;
-
-    if (!input.curriculumItems?.length) {
-      return { curriculumItemIds: [] };
-    }
-
-    const itemsList = input.curriculumItems
-      .map((item, i) => `${i + 1}. [id=${item.id}] ${item.code ? item.code + ' — ' : ''}${item.description}`)
-      .join('\n');
-
-    const prompt = `Eres un experto en diseño curricular educativo.
-
-Asignatura: ${subjectLabel(input.subjectName, input.courseLevel)}
-Actividad: ${input.activityTitle}
-Descripción de la actividad: ${input.description}
-
-Lista de saberes/contenidos del currículum disponibles:
-${itemsList}
-
-Identifica cuáles de estos saberes (entre 1 y 4 como máximo) están más relacionados con la actividad descrita.
-Responde ÚNICAMENTE con un JSON válido de la forma {"ids": ["id1", "id2"]}, usando exactamente los valores "id" indicados entre corchetes en la lista. No incluyas explicaciones ni texto adicional, ni bloques de código markdown.`;
-
-    const raw = await generateText(uid, prompt);
-
-    let ids: string[] = [];
-    try {
-      const cleaned = raw.replace(/```json|```/g, '').trim();
-      const parsed = JSON.parse(cleaned);
-      if (Array.isArray(parsed.ids)) {
-        const validIds = new Set(input.curriculumItems.map((i) => i.id));
-        ids = parsed.ids.filter((id: unknown): id is string => typeof id === 'string' && validIds.has(id));
-      }
-    } catch {
-      ids = [];
-    }
-
-    return { curriculumItemIds: ids };
   }
 );
 
@@ -241,7 +156,11 @@ ${sessionsList}
 
 Responde en ${lang}. Redacta entre 2 y 5 objetivos de aprendizaje claros y concisos, uno por línea, sin numerar ni usar viñetas, con el lenguaje propio de una programación didáctica.`;
 
-    const objectives = await generateText(uid, prompt);
+    // Redacción breve (2-5 objetivos): no hace falta razonamiento profundo.
+    const objectives = await generateText(uid, prompt, {
+      thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+      maxOutputTokens: 1024,
+    });
     return { objectives };
   }
 );
@@ -274,7 +193,11 @@ Redacta:
 
 Responde en ${lang}. Responde ÚNICAMENTE con un JSON válido de la forma {"methodology": "...", "resources": "..."}, sin texto adicional ni bloques de código markdown.`;
 
-    const raw = await generateText(uid, prompt);
+    // Redacción breve (un párrafo + una lista corta): thinking bajo.
+    const raw = await generateText(uid, prompt, {
+      thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+      maxOutputTokens: 1536,
+    });
     try {
       const parsed = parseJsonResponse<{ methodology?: string; resources?: string }>(raw);
       return {
@@ -353,7 +276,12 @@ Redacta:
 
 Responde en ${lang}. Responde ÚNICAMENTE con un JSON válido de la forma {"sabers": "...", "criteria": "..."}, sin texto adicional ni bloques de código markdown.`;
 
-    const raw = await generateText(uid, prompt);
+    // Adapta saberes/criterios de un catálogo ya dado: no es redacción libre,
+    // pero el listado puede ser largo, así que se deja algo más de margen.
+    const raw = await generateText(uid, prompt, {
+      thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+      maxOutputTokens: 2048,
+    });
     try {
       const parsed = parseJsonResponse<{ sabers?: string; criteria?: string }>(raw);
       return {
@@ -394,7 +322,13 @@ ${input.text}
 
 Responde ÚNICAMENTE con un JSON válido de la forma {"corrected": "...", "hasErrors": true|false}, sin bloques de código markdown ni texto adicional.`;
 
-    const raw = await generateText(uid, prompt);
+    // Corrección mecánica de ortografía/gramática: sin razonamiento, con
+    // margen de salida generoso porque el texto corregido puede ser tan
+    // largo como el original.
+    const raw = await generateText(uid, prompt, {
+      thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
+      maxOutputTokens: 4096,
+    });
 
     try {
       const cleaned = raw.replace(/```json|```/g, '').trim();
@@ -444,7 +378,11 @@ ${input.summarySourceText || '(sin texto adicional)'}
 Responde en ${languageName(input.language)}.
 Redacta un resumen claro y conciso de los puntos más importantes tratados en la reunión, organizado en una lista breve (sin numerar, usando saltos de línea). Si hay tareas o acuerdos pendientes, destácalos al final bajo un apartado corto. No inventes información que no esté en las notas o el texto proporcionado.`;
 
-    const summary = await generateText(uid, prompt);
+    // Resumen breve a partir de texto ya dado: no hace falta razonar mucho.
+    const summary = await generateText(uid, prompt, {
+      thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+      maxOutputTokens: 1024,
+    });
     return { summary };
   }
 );
@@ -536,7 +474,12 @@ Reglas:
 Devuelve SOLO este JSON sin texto extra:
 {"slots":[{"day":0,"startTime":"08:30","endTime":"09:15","subjectName":"Castellà","group":"1r B","room":""}]}`;
 
-    const raw = await generateText(uid, prompt);
+    // Extracción mecánica de una tabla a JSON: sin razonamiento, con margen
+    // amplio de salida porque un horario completo puede tener muchas franjas.
+    const raw = await generateText(uid, prompt, {
+      thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
+      maxOutputTokens: 4096,
+    });
 
     try {
       const clean = raw.replace(/```json|```/g, '').trim();
@@ -723,7 +666,11 @@ ${selectionList}
 Identifica cuáles de estas competencias (normalmente entre 1 y 3, no todas salvo que la actividad sea muy transversal) encajan mejor con la actividad descrita.
 Responde ÚNICAMENTE con un JSON válido de la forma {"refs": [n, n]}, usando los números entre corchetes de la lista de arriba. Sin texto adicional ni bloques de código markdown.`;
 
-  const rawSelect = await generateText(uid, selectPrompt);
+  // Paso 1: selección numérica pura, sin redacción — thinking mínimo.
+  const rawSelect = await generateText(uid, selectPrompt, {
+    thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
+    maxOutputTokens: 512,
+  });
   let refs: number[] = [];
   try {
     const parsed = parseJsonResponse<{ refs?: unknown }>(rawSelect);
@@ -787,7 +734,12 @@ Responde ÚNICAMENTE con este JSON (sin texto adicional, sin markdown). El array
 
 Responde en ${lang}.`;
 
-  const rawBuild = await generateText(uid, buildPrompt);
+  // Redacta criterios/indicadores a partir de CE ya elegidas: no hace falta
+  // razonamiento profundo, pero el JSON puede tener varios criterios largos.
+  const rawBuild = await generateText(uid, buildPrompt, {
+    thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+    maxOutputTokens: 2048,
+  });
   const parsedBuild = parseJsonResponse<GenerateRubricOutput>(rawBuild);
 
   // El "ceId" lo asigna el servidor por posición (garantizado correcto), no la IA.
@@ -856,7 +808,12 @@ Responde SOLO con este JSON (sin texto adicional, sin markdown):
 
 Responde en ${lang}.`;
 
-  const raw = await generateText(uid, prompt);
+  // Rúbrica completa (3-5 criterios con 4 indicadores cada uno): thinking
+  // bajo, con margen de salida acorde al tamaño del JSON esperado.
+  const raw = await generateText(uid, prompt, {
+    thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+    maxOutputTokens: 2048,
+  });
   const parsed = parseJsonResponse<GenerateRubricOutput>(raw);
   normalizeWeights(parsed.criteria);
   return parsed;
@@ -939,7 +896,11 @@ Redacta un comentario breve (máximo 2-3 líneas) en ${lang}, que:
 
 Responde ÚNICAMENTE con el texto del comentario, sin explicaciones adicionales.`;
 
-    const comment = await generateText(uid, prompt);
+    // Comentario breve (2-3 líneas): no hace falta razonamiento profundo.
+    const comment = await generateText(uid, prompt, {
+      thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+      maxOutputTokens: 512,
+    });
     return { comment: comment.trim() };
   }
 );
@@ -1022,7 +983,12 @@ Para cada franja, redacta una frase ${lengthInstruction(input.length)} en ${lang
 
 Responde ÚNICAMENTE con un JSON válido de la forma {"texts": ["frase 1", "frase 2", ...]}, con EXACTAMENTE ${input.bands.length} elementos, en el mismo orden que la lista de franjas de arriba. Sin texto adicional ni bloques de código markdown.`;
 
-    const raw = await generateText(uid, prompt);
+    // Varias frases cortas en un único JSON: thinking bajo, margen de salida
+    // proporcional al número de franjas.
+    const raw = await generateText(uid, prompt, {
+      thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+      maxOutputTokens: 2048,
+    });
 
     let texts: string[] = [];
     try {
@@ -1103,7 +1069,12 @@ Para cada criterio, identifica a cuál de las CE de arriba pertenece con más pr
 
 Responde ÚNICAMENTE con un JSON válido de la forma {"matches": [{"index": n, "ref": n|null}, ...]}, con un elemento por cada criterio (usa el mismo número "index" del criterio), usando el número entre corchetes [n] de la CE que le corresponda, o null si ninguna encaja de verdad. No incluyas explicaciones ni bloques de código markdown.`;
 
-    const raw = await generateText(uid, prompt);
+    // Emparejamiento numérico puro (sin redacción): thinking mínimo, margen
+    // de salida generoso porque puede haber muchos criterios a la vez.
+    const raw = await generateText(uid, prompt, {
+      thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
+      maxOutputTokens: 2048,
+    });
 
     const matches = emptyMatches;
     try {
@@ -1322,9 +1293,15 @@ Numera las preguntas. Usa un formato limpio en markdown ligero (## para el títu
 
 Responde en ${lang}. Responde ÚNICAMENTE con un JSON válido de la forma {"examTitle": "...", "statement": "..."}, sin bloques de código markdown envolviendo el JSON (el campo "statement" sí puede contener markdown ligero dentro de su texto).`;
 
+    // Examen completo (varias preguntas con enunciados): thinking bajo, con
+    // margen de salida amplio para exámenes largos o con PDF de contexto.
+    const examConfig = {
+      thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+      maxOutputTokens: 8192,
+    };
     const raw = hasPdf
-      ? await generateTextWithPdf(uid, prompt, input.contextPdfBase64!)
-      : await generateText(uid, prompt);
+      ? await generateTextWithPdf(uid, prompt, input.contextPdfBase64!, examConfig)
+      : await generateText(uid, prompt, examConfig);
     try {
       const parsed = parseJsonResponse<{ examTitle?: string; statement?: string }>(raw);
       return {
@@ -1354,6 +1331,7 @@ interface PlanLearningUnitInput {
   courseLevel?: string;
   sessionCount: number;
   competencies: PlanUnitCompetencyInput[];
+  curriculumItems?: { id: string; code: string; description: string }[]; // saberes/contenidos del currículum, para asignarlos por sesión en la misma llamada
   contentsToWorkOn?: string; // contenidos concretos que quiere trabajar el docente (evita que la IA se los invente)
   threadIdea?: string; // hilo conductor / gamificación
   methodologies: string[]; // máximo 3
@@ -1369,25 +1347,30 @@ interface PlanLearningUnitSession {
   title: string;
   description: string;
   ceIds: string[]; // subconjunto de los ids de PlanLearningUnitInput.competencies
+  objectives: string; // objetivos de aprendizaje de la sesión (antes generados aparte con generateActivityObjectives)
+  curriculumItemIds: string[]; // subconjunto de los ids de PlanLearningUnitInput.curriculumItems (antes generado aparte con matchCurriculumItems)
   isEvaluated: boolean;
   evaluationName?: string;
 }
 
 export const planLearningUnit = onCall(
-  // Es la generación más pesada de Profi (hasta 20 sesiones detalladas +
-  // rúbrica en texto completo): 90s se quedaba corto y Cloud Run cortaba la
-  // conexión a medio generar, lo que el navegador del docente mostraba como
-  // un falso error de CORS (sin cabecera Access-Control-Allow-Origin) en vez
-  // de un error legible. 240s da margen de sobra incluso con sessionCount alto.
+  // Es la generación más pesada de Profi (hasta 15 sesiones detalladas, cada
+  // una con objetivos y saberes asignados): 90s se quedaba corto y Cloud Run
+  // cortaba la conexión a medio generar, lo que el navegador del docente
+  // mostraba como un falso error de CORS (sin cabecera
+  // Access-Control-Allow-Origin) en vez de un error legible. 240s da margen
+  // de sobra incluso con sessionCount alto.
   { region: REGION, secrets: [geminiEncryptionKey], enforceAppCheck: false, timeoutSeconds: 240 },
   async (request) => {
     const uid = requireAuth(request.auth?.uid);
     const input = request.data as PlanLearningUnitInput;
     const lang = languageName(input.language);
     const subject = subjectLabel(input.subjectName, input.courseLevel);
-    const sessionCount = Math.min(20, Math.max(1, Math.round(input.sessionCount || 1)));
+    const sessionCount = Math.min(15, Math.max(1, Math.round(input.sessionCount || 1)));
     const competencies = Array.isArray(input.competencies) ? input.competencies : [];
     const validCeIds = new Set(competencies.map((ce) => ce.id));
+    const curriculumItems = Array.isArray(input.curriculumItems) ? input.curriculumItems : [];
+    const validItemIds = new Set(curriculumItems.map((item) => item.id));
 
     const ceList = competencies.length > 0
       ? competencies
@@ -1421,6 +1404,12 @@ export const planLearningUnit = onCall(
       ? `PARTICULARIDADES DE ESTE GRUPO CONCRETO (además de la etapa/curso): ${input.groupNotes.trim()}. Ten esto MUY en cuenta al diseñar cada sesión: adapta el lenguaje, la dificultad, el formato de las actividades y las instrucciones a esta realidad concreta del grupo (por ejemplo, si se indica que no saben leer con soltura, prioriza dinámicas orales/visuales y evita depender de textos largos o instrucciones escritas complejas).`
       : '';
 
+    const curriculumItemsList = curriculumItems.length > 0
+      ? curriculumItems
+          .map((item, i) => `${i + 1}. [id=${item.id}] ${item.code ? item.code + ' — ' : ''}${item.description}`)
+          .join('\n')
+      : '';
+
     const prompt = `Eres Profi, asistente de un docente de ${subject}. El docente quiere planificar una Situación de Aprendizaje (SA) completa, repartida en EXACTAMENTE ${sessionCount} sesiones de clase, con esta estructura obligatoria en TRES FASES:
 - FASE "inicio": activación de conocimientos previos / motivación inicial (normalmente 1 sesión, 2 si ${sessionCount} es alto).
 - FASE "desarrollo": el grueso de las sesiones, donde se trabaja el contenido y se avanza hacia el producto final.
@@ -1429,7 +1418,7 @@ Reparte las ${sessionCount} sesiones entre las tres fases de forma coherente y e
 ${groupNotesText ? `\n${groupNotesText}\n` : ''}
 COMPETÈNCIES ESPECÍFIQUES (CE) A TRABAJAR EN ESTA SA:
 ${ceList}
-
+${curriculumItemsList ? `\nSABERES/CONTENIDOS DEL CURRÍCULUM DISPONIBLES (para asignar a cada sesión):\n${curriculumItemsList}\n` : ''}
 CONTENIDOS: ${contentsText}
 
 PRODUCTO FINAL de la SA: ${input.finalProduct}
@@ -1445,30 +1434,35 @@ Para cada sesión, indica:
 - "title": título corto y concreto.
 - "description": qué se hace en esa sesión (dinámica, metodología aplicada, relación con el hilo conductor si existe), de 2 a 4 frases, lista para usar directamente como planificación.
 - "ceIds": array con los identificadores EXACTOS (tal cual aparecen arriba, p.ej. "CE1") de las CE que se trabajan principalmente en esa sesión; puede estar vacío si la sesión es puramente introductoria u organizativa.
+- "objectives": entre 2 y 3 objetivos de aprendizaje claros y concisos para ESA sesión concreta (adecuados al nivel educativo), separados por saltos de línea, sin numerar ni usar viñetas, con lenguaje propio de una programación didáctica.
+- "curriculumItemIds"${curriculumItemsList ? '' : ' (déjalo como array vacío, no hay saberes del currículum disponibles)'}: array con los identificadores EXACTOS (tal cual aparecen entre corchetes en la lista de saberes/contenidos, p.ej. "id-123") de entre 1 y 4 saberes más relacionados con el contenido de esa sesión.
 - "isEvaluated": true si esa sesión concreta genera una evidencia que el docente calificará (un trabajo, una entrega, la presentación del producto final...), false si es una sesión de trabajo no evaluada por sí misma.
 - "evaluationName": SOLO si "isEvaluated" es true, un nombre corto para esa evidencia evaluable (p.ej. "Entrega del guion" o "Presentación final").
 
 También propón un nombre corto para la SA completa ("unitLabel"). No hace falta ninguna rúbrica en texto libre: el docente generará y editará las rúbricas de cada sesión evaluable después, de forma estructurada, directamente en la app.
 
-Responde en ${lang}. Responde ÚNICAMENTE con un JSON válido de la forma {"unitLabel": "...", "sessions": [{"phase": "...", "title": "...", "description": "...", "ceIds": ["..."], "isEvaluated": true, "evaluationName": "..."}]}, con el array "sessions" con EXACTAMENTE ${sessionCount} elementos en orden (inicio primero, síntesis al final). Sin texto adicional ni bloques de código markdown envolviendo el JSON.`;
+Responde en ${lang}. Responde ÚNICAMENTE con un JSON válido de la forma {"unitLabel": "...", "sessions": [{"phase": "...", "title": "...", "description": "...", "ceIds": ["..."], "objectives": "...", "curriculumItemIds": ["..."], "isEvaluated": true, "evaluationName": "..."}]}, con el array "sessions" con EXACTAMENTE ${sessionCount} elementos en orden (inicio primero, síntesis al final). Sin texto adicional ni bloques de código markdown envolviendo el JSON.`;
 
     // Sin acotar el "thinking"/maxOutputTokens (a diferencia del chat, ver
     // línea ~633), este modelo "piensa" con presupuesto dinámico/sin límite
-    // explícito antes de responder. Con un JSON con hasta 20 sesiones
-    // detalladas, eso disparaba la latencia real ("tarda mucho") y, si el
+    // explícito antes de responder. Con un JSON con hasta 15 sesiones
+    // detalladas (cada una con objetivos y saberes asignados, además de las
+    // CE), eso disparaba la latencia real ("tarda mucho") y, si el
     // pensamiento se comía casi todo el presupuesto de salida por defecto,
     // el JSON final llegaba cortado a medias — parseJsonResponse fallaba y
     // el docente veía un error "Internal" genérico sin que hubiera ningún
     // problema con su clave ni con la petición en sí. MEDIUM da margen para
-    // razonar bien sin dispararse, y el techo de maxOutputTokens evita el
-    // truncado del JSON (ya no incluye una rúbrica completa en texto, así
-    // que el margen sobra de más).
+    // razonar bien sin dispararse. El techo de maxOutputTokens se sube a
+    // 20480 (antes 16384) porque cada sesión ahora incluye también
+    // "objectives" y "curriculumItemIds" (antes se generaban aparte con
+    // generateActivityObjectives/matchCurriculumItems); el límite de
+    // sesiones bajó de 20 a 15, lo que compensa parte del aumento por sesión.
     // Nota: gemini-3.6-flash usa "thinkingLevel", no "thinkingBudget" (ver
     // también línea ~638) — con "thinkingBudget" la API devuelve 400
     // INVALID_ARGUMENT.
     const raw = await generateText(uid, prompt, {
       thinkingConfig: { thinkingLevel: ThinkingLevel.MEDIUM },
-      maxOutputTokens: 16384,
+      maxOutputTokens: 20480,
     });
     try {
       const parsed = parseJsonResponse<{ unitLabel?: string; sessions?: unknown }>(raw);
@@ -1487,12 +1481,17 @@ Responde en ${lang}. Responde ÚNICAMENTE con un JSON válido de la forma {"unit
           const ceIds = Array.isArray(s.ceIds)
             ? s.ceIds.filter((id): id is string => typeof id === 'string' && validCeIds.has(id))
             : [];
+          const curriculumItemIds = Array.isArray(s.curriculumItemIds)
+            ? s.curriculumItemIds.filter((id): id is string => typeof id === 'string' && validItemIds.has(id))
+            : [];
           const isEvaluated = s.isEvaluated === true;
           return {
             phase,
             title: typeof s.title === 'string' ? s.title : '',
             description: typeof s.description === 'string' ? s.description : '',
             ceIds,
+            objectives: typeof s.objectives === 'string' ? s.objectives : '',
+            curriculumItemIds,
             isEvaluated,
             ...(isEvaluated && typeof s.evaluationName === 'string' && s.evaluationName.trim()
               ? { evaluationName: s.evaluationName.trim() }
@@ -1508,6 +1507,8 @@ Responde en ${lang}. Responde ÚNICAMENTE con un JSON válido de la forma {"unit
           title: '',
           description: '',
           ceIds: [],
+          objectives: '',
+          curriculumItemIds: [],
           isEvaluated: false,
         });
       }
@@ -1528,6 +1529,111 @@ Responde en ${lang}. Responde ÚNICAMENTE con un JSON válido de la forma {"unit
       if (err instanceof HttpsError) throw err;
       throw new HttpsError('internal', `No se pudo interpretar la planificación generada: ${raw.slice(0, 200)}`);
     }
+  }
+);
+
+// ---------------------------------------------------------------------
+// Generar, en una sola llamada, objetivos + saberes para varias actividades
+// a la vez (retrofit). Sustituye a las antiguas generateActivityObjectives
+// y matchCurriculumItems (una llamada por actividad); esto es para
+// actividades que NO se crearon con el planificador de unidad de Profi
+// (que ya genera estos campos directamente) y que el docente quiere
+// completar a posteriori desde la programación anual.
+// ---------------------------------------------------------------------
+
+interface ActivityObjectivesAndSabersInput {
+  index: number;
+  title: string;
+  description: string;
+}
+
+interface GenerateActivitiesObjectivesAndSabersInput {
+  subjectName: string;
+  courseLevel?: string;
+  activities: ActivityObjectivesAndSabersInput[];
+  curriculumItems: { id: string; code: string; description: string }[];
+  language: string;
+}
+
+// Igual que el límite de 40 mensajes del chat de Profi (línea ~526): defensa
+// en profundidad para que un cliente no pueda mandar un lote enorme en una
+// sola llamada y disparar el tiempo/coste de la función.
+const MAX_ACTIVITIES_BATCH = 30;
+
+export const generateActivitiesObjectivesAndSabers = onCall(
+  { region: REGION, secrets: [geminiEncryptionKey], enforceAppCheck: false, timeoutSeconds: 120 },
+  async (request) => {
+    const uid = requireAuth(request.auth?.uid);
+    const input = request.data as GenerateActivitiesObjectivesAndSabersInput;
+    const lang = languageName(input.language);
+    const subject = subjectLabel(input.subjectName, input.courseLevel);
+    const activities = Array.isArray(input.activities) ? input.activities : [];
+
+    if (activities.length === 0) {
+      return { results: [] };
+    }
+    if (activities.length > MAX_ACTIVITIES_BATCH) {
+      throw new HttpsError(
+        'invalid-argument',
+        `Solo se pueden procesar hasta ${MAX_ACTIVITIES_BATCH} actividades a la vez.`
+      );
+    }
+
+    const curriculumItems = Array.isArray(input.curriculumItems) ? input.curriculumItems : [];
+    const validItemIds = new Set(curriculumItems.map((item) => item.id));
+    const curriculumItemsList = curriculumItems.length > 0
+      ? curriculumItems
+          .map((item, i) => `${i + 1}. [id=${item.id}] ${item.code ? item.code + ' — ' : ''}${item.description}`)
+          .join('\n')
+      : '';
+
+    const activitiesList = activities
+      .map((a) => `${a.index}) Título: ${a.title}\n   Descripción: ${a.description}`)
+      .join('\n\n');
+
+    const prompt = `Eres un experto en diseño curricular educativo. Vas a redactar, para varias actividades de la asignatura de ${subject}, sus objetivos de aprendizaje y los saberes/contenidos del currículum con los que se relacionan.
+
+ACTIVIDADES:
+${activitiesList}
+${curriculumItemsList ? `\nSABERES/CONTENIDOS DEL CURRÍCULUM DISPONIBLES:\n${curriculumItemsList}\n` : '\n(No hay saberes del currículum disponibles: deja "curriculumItemIds" como array vacío en todas las actividades.)\n'}
+Para cada actividad, indica:
+- "index": el número de la actividad tal cual aparece arriba.
+- "objectives": entre 2 y 3 objetivos de aprendizaje claros y concisos para esa actividad, adecuados al nivel educativo indicado, separados por saltos de línea, sin numerar ni usar viñetas, con lenguaje propio de una programación didáctica.
+- "curriculumItemIds": array con los identificadores EXACTOS (tal cual aparecen entre corchetes arriba) de entre 1 y 4 saberes más relacionados con esa actividad, o array vacío si no hay ninguno claramente relacionado.
+
+Responde en ${lang}. Responde ÚNICAMENTE con un JSON válido de la forma {"results": [{"index": 1, "objectives": "...", "curriculumItemIds": ["..."]}]}, con el array "results" con EXACTAMENTE ${activities.length} elementos (uno por actividad). Sin texto adicional ni bloques de código markdown envolviendo el JSON.`;
+
+    // Redacción corta + selección mecánica de ids en lote: thinking bajo,
+    // margen de salida proporcional al número de actividades del lote.
+    const raw = await generateText(uid, prompt, {
+      thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+      maxOutputTokens: Math.min(8192, 512 + activities.length * 220),
+    });
+
+    let results: { index: number; objectives: string; curriculumItemIds: string[] }[] = [];
+    try {
+      const parsed = parseJsonResponse<{ results?: unknown }>(raw);
+      const rawResults = Array.isArray(parsed.results) ? parsed.results : [];
+      results = rawResults
+        .filter((r): r is Record<string, unknown> => !!r && typeof r === 'object')
+        .map((r) => ({
+          index: typeof r.index === 'number' ? r.index : -1,
+          objectives: typeof r.objectives === 'string' ? r.objectives : '',
+          curriculumItemIds: Array.isArray(r.curriculumItemIds)
+            ? r.curriculumItemIds.filter((id): id is string => typeof id === 'string' && validItemIds.has(id))
+            : [],
+        }));
+    } catch {
+      results = [];
+    }
+
+    // Garantizamos un resultado por cada actividad pedida, aunque la IA se
+    // equivoque en el conteo o en los índices (mejor un campo vacío que
+    // romper la actualización en el cliente).
+    const byIndex = new Map(results.map((r) => [r.index, r]));
+    const finalResults = activities.map((a) => byIndex.get(a.index) ?? { index: a.index, objectives: '', curriculumItemIds: [] });
+
+    return { results: finalResults };
   }
 );
 
@@ -1589,7 +1695,11 @@ ${studentLines}
 
 Responde en ${lang}. Redacta un resumen en 2-3 párrafos cortos (o una lista breve si lo ves más claro), en un tono cercano y constructivo dirigido al propio docente: qué va bien, qué competencias conviene reforzar, y si hay alumnado que merece atención individual. No des consejos genéricos vacíos, básate en los datos concretos de arriba.`;
 
-    const summary = await generateText(uid, prompt);
+    // Resumen breve (2-3 párrafos) a partir de datos ya calculados: thinking bajo.
+    const summary = await generateText(uid, prompt, {
+      thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+      maxOutputTokens: 1024,
+    });
     return { summary };
   }
 );
@@ -1642,7 +1752,11 @@ ${formatCriteriaForPrompt(input.generalCriteria)}${adaptedBlock}
 
 Responde en ${lang}. Propón entre 3 y 5 sugerencias concretas y accionables para adaptar esta actividad a ${input.studentFirstName} (por ejemplo: simplificar el enunciado, dar más tiempo, cambiar el formato de respuesta, reducir el número de ítems, apoyos visuales, etc.), manteniendo en la medida de lo posible los mismos objetivos de aprendizaje. Sé específico a esta actividad, no genérico. Formato: lista breve sin numerar.`;
 
-    const suggestions = await generateText(uid, prompt);
+    // Lista breve de 3-5 sugerencias: no hace falta razonamiento profundo.
+    const suggestions = await generateText(uid, prompt, {
+      thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+      maxOutputTokens: 1024,
+    });
     return { suggestions };
   }
 );
@@ -1682,7 +1796,11 @@ ${input.keyPoints}
 
 Responde en ${lang}. Redacta el mensaje completo, listo para copiar y enviar (por email o agenda escolar): con un saludo inicial, el cuerpo del mensaje bien organizado, y una despedida cordial. Tono cercano pero profesional, propio de la comunicación de un centro educativo. No inventes datos (fechas, horas, lugares) que no estén en los puntos clave; si falta algo imprescindible, déjalo entre corchetes como [FECHA] para que el docente lo complete.`;
 
-    const draft = await generateText(uid, prompt);
+    // Mensaje completo pero de longitud moderada: thinking bajo.
+    const draft = await generateText(uid, prompt, {
+      thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+      maxOutputTokens: 2048,
+    });
     return { draft };
   }
 );

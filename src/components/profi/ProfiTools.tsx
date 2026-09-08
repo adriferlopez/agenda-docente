@@ -21,6 +21,7 @@ import { computeBlendedGrade } from '@/utils/grading';
 import { getEffectiveTerms, termForDate } from '@/utils/terms';
 import { getWeekStart, shiftWeek, isoDateForDayInWeek } from '@/utils/dates';
 import { getCurriculumForSubject } from '@/data/curriculum';
+import { getSubjectSaberItems } from '@/utils/subjectSabers';
 import type { EtapaCurriculum } from '@/data/curriculum/types';
 import { getEffectiveEtapas } from '@/types';
 import { subjectDisplayName } from '@/utils/timetableDisplay';
@@ -1016,11 +1017,16 @@ function PlanUnitTool({ onClose }: { onClose: () => void }) {
       if (customMethodology.trim()) methodologies.push(customMethodology.trim());
       const materialTypes = [...selectedMaterialIds].map((id) => t(`profi.tools.unit.material.${id}`));
       if (customMaterial.trim()) materialTypes.push(customMaterial.trim());
+      // Saberes del currículum con id real (mismo cálculo que en Programación
+      // anual), para que Profi asigne saberes por sesión en la misma llamada
+      // en vez de necesitar una asignación aparte después.
+      const curriculumItems = getSubjectSaberItems(subject, curriculum).map((i) => ({ id: i.id, code: i.code, description: i.description }));
       const result = await planLearningUnit({
         subjectName: subject.name,
         courseLevel: subject.courseLevel,
         sessionCount,
         competencies,
+        curriculumItems,
         contentsToWorkOn: contentsToWorkOn.trim() || undefined,
         threadIdea: threadIdea.trim() || undefined,
         methodologies: methodologies.slice(0, MAX_METHODOLOGIES),
@@ -1102,6 +1108,8 @@ function PlanUnitTool({ onClose }: { onClose: () => void }) {
             evaluate: false,
             status: 'planned',
             saId: targetSaId,
+            aiObjectives: sessions[i].objectives,
+            curriculumItemIds: sessions[i].curriculumItemIds,
           })
         )
       );
@@ -1269,9 +1277,9 @@ function PlanUnitTool({ onClose }: { onClose: () => void }) {
         label={t('profi.tools.unit.sessionCount')}
         type="number"
         min={1}
-        max={20}
+        max={15}
         value={sessionCount}
-        onChange={(e) => setSessionCount(Math.min(20, Math.max(1, Number(e.target.value) || 1)))}
+        onChange={(e) => setSessionCount(Math.min(15, Math.max(1, Number(e.target.value) || 1)))}
       />
       <p className="text-xs -mt-1.5" style={{ color: 'var(--text-secondary)' }}>{t('profi.tools.unit.sessionCountHint')}</p>
 
