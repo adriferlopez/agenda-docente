@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthListener } from '@/hooks/useAuthListener';
 import ProtectedRoute from '@/components/auth/ProtectedRoute';
 import AppLayout from '@/components/layout/AppLayout';
+import UpdateBanner from '@/components/pwa/UpdateBanner';
 
 import LoginPage from '@/pages/LoginPage';
 import RegisterPage from '@/pages/RegisterPage';
@@ -116,6 +117,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <AppRoutes />
+      <UpdateBanner />
     </BrowserRouter>
   );
 }

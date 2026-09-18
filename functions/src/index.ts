@@ -5,7 +5,7 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
 import nodemailer from 'nodemailer';
 import { encryptApiKey } from './crypto.js';
-import { generateText, generateTextWithPdf, languageName, subjectLabel } from './gemini.js';
+import { generateText, generateTextWithMeta, generateTextWithPdf, generateTextWithPdfMeta, languageName, subjectLabel } from './gemini.js';
 import { ThinkingLevel } from '@google/genai';
 
 initializeApp();
@@ -1314,6 +1314,87 @@ Responde en ${lang}. Responde ÚNICAMENTE con un JSON válido de la forma {"exam
   }
 );
 
+// --- Extraer sesiones (y fechas, si las tiene) de una programación externa
+// ya elaborada (PDF subido por el docente), para poder previsualizarla,
+// editarla y luego incorporarla a la programación semanal ---
+
+interface ExtractExternalProgrammingInput {
+  subjectName: string;
+  courseLevel?: string;
+  // PDF con la programación a extraer, en base64 (sin el prefijo
+  // data:...;base64,).
+  pdfBase64: string;
+  language: string;
+}
+
+interface ExtractedExternalSession {
+  title: string;
+  description: string;
+  date?: string; // ISO yyyy-mm-dd, solo si el documento la especifica
+}
+
+export const extractExternalProgramming = onCall(
+  { region: REGION, secrets: [geminiEncryptionKey], enforceAppCheck: false, timeoutSeconds: 180 },
+  async (request) => {
+    const uid = requireAuth(request.auth?.uid);
+    const input = request.data as ExtractExternalProgrammingInput;
+    if (!input.pdfBase64) {
+      throw new HttpsError('invalid-argument', 'Falta el PDF con la programación a extraer.');
+    }
+    const lang = languageName(input.language);
+    const subject = subjectLabel(input.subjectName, input.courseLevel);
+
+    const prompt = `Eres Profi, asistente de un docente de ${subject}. El docente te ha subido un documento (PDF) con una programación didáctica ya elaborada por otra persona (de una editorial, de un curso anterior, etc.) y quiere incorporarla a su programación semanal.
+
+Lee el documento y extrae la lista de sesiones o actividades de clase que contiene, en el MISMO ORDEN en que aparecen. Para cada una, indica:
+- "title": título corto y concreto de esa sesión o actividad.
+- "description": de 1 a 3 frases resumiendo qué se hace en ella, basado en el contenido real del documento (no inventes contenido que no esté).
+- "date": SOLO si el documento asigna una fecha concreta (día/mes/año) a esa sesión, en formato "YYYY-MM-DD". Si el documento organiza el contenido por número de sesión/semana/unidad sin fecha concreta (p.ej. "Sesión 3", "Semana 2"), omite este campo por completo en esa sesión: NUNCA inventes una fecha que no esté escrita.
+
+Si el documento no contiene sesiones o actividades de clase identificables (p.ej. es solo una portada, un índice, o material no relacionado con planificación de clases), devuelve el array "sessions" vacío.
+
+Si el documento tiene más de 60 sesiones, extrae solo las primeras 60 en orden.
+
+Responde en ${lang}. Responde ÚNICAMENTE con un JSON válido de la forma {"sessions": [{"title": "...", "description": "...", "date": "YYYY-MM-DD"}]} (omite "date" en las sesiones sin fecha explícita). Sin texto adicional ni bloques de código markdown envolviendo el JSON.`;
+
+    // Documento externo potencialmente largo (una programación de todo un
+    // trimestre o curso): thinking bajo (no hace falta razonar, solo leer y
+    // estructurar) y un techo de salida generoso, con detección de corte
+    // (igual que planLearningUnit, ver comentario allí) para no devolver un
+    // JSON a medias sin explicación si el documento es muy largo.
+    const { text: raw, truncated } = await generateTextWithPdfMeta(uid, prompt, input.pdfBase64, {
+      thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+      maxOutputTokens: 32768,
+    });
+    if (truncated) {
+      throw new HttpsError(
+        'internal',
+        'El documento es demasiado largo y la extracción se ha cortado antes de terminar. Prueba a subir solo una parte del documento (por ejemplo, un trimestre o una unidad), o inténtalo de nuevo.'
+      );
+    }
+    try {
+      const parsed = parseJsonResponse<{ sessions?: unknown }>(raw);
+      const rawSessions = Array.isArray(parsed.sessions) ? parsed.sessions : [];
+      const sessions: ExtractedExternalSession[] = rawSessions
+        .filter((s): s is Record<string, unknown> => !!s && typeof s === 'object')
+        .slice(0, 60)
+        .map((s) => {
+          const date = typeof s.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s.date) ? s.date : undefined;
+          return {
+            title: typeof s.title === 'string' ? s.title.trim() : '',
+            description: typeof s.description === 'string' ? s.description.trim() : '',
+            ...(date ? { date } : {}),
+          };
+        })
+        .filter((s) => s.title);
+      return { sessions };
+    } catch (err) {
+      if (err instanceof HttpsError) throw err;
+      throw new HttpsError('internal', `No se pudo interpretar la programación extraída: ${raw.slice(0, 200)}`);
+    }
+  }
+);
+
 // --- 2) Planificar una unidad didáctica completa (Situación de Aprendizaje)
 // en N sesiones, estructuradas en 3 fases (inicio/desarrollo/síntesis) ---
 
@@ -1443,28 +1524,30 @@ También propón un nombre corto para la SA completa ("unitLabel"). No hace falt
 
 Responde en ${lang}. Responde ÚNICAMENTE con un JSON válido de la forma {"unitLabel": "...", "sessions": [{"phase": "...", "title": "...", "description": "...", "ceIds": ["..."], "objectives": "...", "curriculumItemIds": ["..."], "isEvaluated": true, "evaluationName": "..."}]}, con el array "sessions" con EXACTAMENTE ${sessionCount} elementos en orden (inicio primero, síntesis al final). Sin texto adicional ni bloques de código markdown envolviendo el JSON.`;
 
-    // Sin acotar el "thinking"/maxOutputTokens (a diferencia del chat, ver
-    // línea ~633), este modelo "piensa" con presupuesto dinámico/sin límite
-    // explícito antes de responder. Con un JSON con hasta 15 sesiones
-    // detalladas (cada una con objetivos y saberes asignados, además de las
-    // CE), eso disparaba la latencia real ("tarda mucho") y, si el
-    // pensamiento se comía casi todo el presupuesto de salida por defecto,
-    // el JSON final llegaba cortado a medias — parseJsonResponse fallaba y
-    // el docente veía un error "Internal" genérico sin que hubiera ningún
-    // problema con su clave ni con la petición en sí. MEDIUM da margen para
-    // razonar bien sin dispararse. El techo de maxOutputTokens se sube a
-    // 20480 (antes 16384) porque cada sesión ahora incluye también
-    // "objectives" y "curriculumItemIds" (antes se generaban aparte con
-    // generateActivityObjectives/matchCurriculumItems); el límite de
-    // sesiones bajó de 20 a 15, lo que compensa parte del aumento por sesión.
-    // Nota: gemini-3.6-flash usa "thinkingLevel", no "thinkingBudget" (ver
-    // también línea ~638) — con "thinkingBudget" la API devuelve 400
-    // INVALID_ARGUMENT.
-    const raw = await generateText(uid, prompt, {
-      thinkingConfig: { thinkingLevel: ThinkingLevel.MEDIUM },
-      maxOutputTokens: 20480,
+    // El "thinking" y el maxOutputTokens comparten el mismo presupuesto en
+    // gemini-3.6-flash (ver comentario de generateTextWithMeta en gemini.ts).
+    // Con MEDIUM, un tema con más "chicha" para razonar (gamificación,
+    // hilo conductor elaborado...) podía comerse buena parte del
+    // presupuesto pensando y dejar el JSON final a medias — el docente veía
+    // el error "No se pudo interpretar..." con el JSON crudo cortado. LOW
+    // es el mismo nivel que usan el resto de generaciones largas de la app
+    // (exámenes, rúbricas, etc.): aquí no hace falta razonamiento profundo,
+    // solo redactar de forma estructurada. Además, maxOutputTokens ahora
+    // escala con el número de sesiones (cada una añade "objectives" y
+    // "curriculumItemIds" desde que se fusionó con esas dos generaciones
+    // aparte), en vez de un techo fijo que se quedaba corto con 15 sesiones.
+    const maxOutputTokens = Math.min(32768, 6144 + sessionCount * 1300);
+    const { text: raw, truncated } = await generateTextWithMeta(uid, prompt, {
+      thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+      maxOutputTokens,
     });
     try {
+      if (truncated) {
+        throw new HttpsError(
+          'internal',
+          'La planificación generada era demasiado larga y se ha cortado antes de terminar. Prueba a reducir el número de sesiones de la unidad, o vuelve a intentarlo.'
+        );
+      }
       const parsed = parseJsonResponse<{ unitLabel?: string; sessions?: unknown }>(raw);
       const rawSessions = Array.isArray(parsed.sessions) ? parsed.sessions : [];
       let sessions: PlanLearningUnitSession[] = rawSessions

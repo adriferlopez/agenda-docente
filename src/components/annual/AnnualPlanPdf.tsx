@@ -335,16 +335,18 @@ function SessionsTablePage({
             <Text style={tablePage.weekCellText}>{plan.weekStartDate}</Text>
           </View>
           <View style={[tablePage.bodyCell, { borderColor: COLORS.tableActivitatBorder }]}>
-            <Text style={tablePage.bodyCellTitle}>{plan.title}</Text>
-            {plan.description?.trim() && (
+            <Text style={tablePage.bodyCellTitle}>
+              {plan.isContinuation ? t('weekly.continuationOfPrevious') : plan.title}
+            </Text>
+            {!plan.isContinuation && plan.description?.trim() && (
               <Text style={tablePage.bodyCellText}>{plan.description.trim()}</Text>
             )}
           </View>
           <View style={[tablePage.bodyCell, { borderColor: COLORS.tableObjectiusBorder }]}>
-            <Text style={tablePage.bodyCellText}>{plan.aiObjectives || '—'}</Text>
+            <Text style={tablePage.bodyCellText}>{plan.isContinuation ? '—' : (plan.aiObjectives || '—')}</Text>
           </View>
           <View style={[tablePage.bodyCell, { borderColor: COLORS.tableSabersBorder }]}>
-            <Text style={tablePage.bodyCellText}>{sabersTextForPlan(plan, curriculumById)}</Text>
+            <Text style={tablePage.bodyCellText}>{plan.isContinuation ? '—' : sabersTextForPlan(plan, curriculumById)}</Text>
           </View>
         </View>
       ))}

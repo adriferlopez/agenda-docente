@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate, Link } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '@/firebase/config';
 import { useAuthStore } from '@/store/authStore';
@@ -11,8 +11,10 @@ import Button from '@/components/ui/Button';
 import { Input, Textarea } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import TagMultiSelect from '@/components/ui/TagMultiSelect';
-import { IconLock, IconCheck, IconAlertTriangle, IconSparkles } from '@/components/ui/icons';
+import { IconLock, IconCheck, IconAlertTriangle, IconSparkles, IconRefresh } from '@/components/ui/icons';
 import { useOnboardingStore } from '@/store/onboardingStore';
+import { usePwaStore } from '@/store/pwaStore';
+import { checkForUpdate } from '@/pwa';
 import type { Language, UserProfile } from '@/types';
 import { getEffectiveEtapas } from '@/types';
 import { ETAPES, COMUNITATS, type Etapa, type Comunitat } from '@/data/curriculum/types';
@@ -138,6 +140,9 @@ export default function SettingsPage() {
 
       {/* Ayuda */}
       <HelpCard />
+
+      {/* Actualizaciones de la app instalada en el dispositivo */}
+      <UpdateCard />
 
       {/* Aviso legal */}
       <Card className="flex flex-col gap-2">
@@ -363,7 +368,6 @@ function GeminiKeyCard() {
 
 function SecurityCard() {
   const { t } = useTranslation();
-  const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const profile = useAuthStore((s) => s.profile);
   const setProfile = useAuthStore((s) => s.setProfile);
@@ -460,7 +464,12 @@ function SecurityCard() {
     setDeleting(true);
     try {
       await deleteAccountRequest();
-      navigate('/login');
+      // Recarga completa de página (no navigate() del router):
+      // deleteAccountRequest() ya ha terminado la instancia de Firestore
+      // para poder borrar su caché local, así que hace falta un contexto de
+      // JS totalmente nuevo para que ningún componente siga montado
+      // intentando usarla.
+      window.location.href = '/login';
     } catch {
       setError(t('settings.deleteAccountError'));
       setDeleting(false);
@@ -574,6 +583,63 @@ function HelpCard() {
       <Button variant="secondary" size="sm" onClick={openTour} className="self-start">
         {t('onboarding.reopen')}
       </Button>
+    </Card>
+  );
+}
+
+/**
+ * Estado de la instalación como app (PWA): permite comprobar manualmente si
+ * hay una versión nueva sin esperar a que el service worker la detecte por
+ * su cuenta (ver src/pwa.ts). Si ya hay una detectada, ofrece el mismo
+ * botón de activarla que el aviso flotante (UpdateBanner.tsx).
+ */
+function UpdateCard() {
+  const { t } = useTranslation();
+  const updateAvailable = usePwaStore((s) => s.updateAvailable);
+  const applyUpdate = usePwaStore((s) => s.applyUpdate);
+  const registration = usePwaStore((s) => s.registration);
+  const checking = usePwaStore((s) => s.checking);
+  const [upToDateNotice, setUpToDateNotice] = useState(false);
+  const swSupported = typeof navigator !== 'undefined' && 'serviceWorker' in navigator;
+
+  async function handleCheck() {
+    setUpToDateNotice(false);
+    const found = await checkForUpdate();
+    if (!found) {
+      setUpToDateNotice(true);
+      setTimeout(() => setUpToDateNotice(false), 4000);
+    }
+  }
+
+  return (
+    <Card className="flex flex-col gap-3">
+      <h2 className="font-display text-lg text-ink">{t('settings.updates')}</h2>
+      <p className="text-sm text-ink-soft">{t('settings.updatesHelp')}</p>
+      {updateAvailable ? (
+        <div className="flex items-center gap-2 flex-wrap">
+          <p className="text-sm font-medium" style={{ color: 'var(--accent)' }}>{t('pwa.updateAvailable')}</p>
+          <Button size="sm" onClick={applyUpdate}>{t('pwa.updateNow')}</Button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<IconRefresh size={16} />}
+            onClick={handleCheck}
+            disabled={!registration || checking}
+            className="self-start"
+          >
+            {checking ? t('settings.updatesChecking') : t('settings.updatesCheck')}
+          </Button>
+          {upToDateNotice && (
+            <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{t('settings.updatesUpToDate')}</span>
+          )}
+        </div>
+      )}
+      {!swSupported && (
+        <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>{t('settings.updatesUnsupported')}</p>
+      )}
     </Card>
   );
 }

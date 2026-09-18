@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   IconHome2, IconTable, IconNotebook, IconFileText,
@@ -34,7 +34,6 @@ const secondaryNavItems = [
 
 export default function AppLayout() {
   const { t } = useTranslation();
-  const navigate = useNavigate();
   const location = useLocation();
   const user = useAuthStore((s) => s.user);
   const profile = useAuthStore((s) => s.profile);
@@ -58,7 +57,11 @@ export default function AppLayout() {
 
   async function handleLogout() {
     await signOut();
-    navigate('/login');
+    // Recarga completa de página (no navigate() del router): signOut() ya
+    // ha terminado la instancia de Firestore para poder borrar su caché
+    // local, así que hace falta un contexto de JS totalmente nuevo para que
+    // ningún componente siga montado intentando usarla.
+    window.location.href = '/login';
   }
 
   return (

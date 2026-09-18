@@ -503,6 +503,36 @@ export interface PlannedLearningUnit {
   sessions: PlannedUnitSession[];
 }
 
+// --- Extraer sesiones (y fechas, si las tiene) de una programación externa
+// ya elaborada, subida como PDF, para incorporarla a la programación
+// semanal (previa previsualización y edición por parte del docente) ---
+
+interface ExtractExternalProgrammingArgs {
+  subjectName: string;
+  courseLevel?: string;
+  pdfBase64: string;
+  language: string;
+}
+
+export interface ExtractedExternalSession {
+  title: string;
+  description: string;
+  date?: string; // ISO yyyy-mm-dd, solo si el documento la especifica
+}
+
+export async function extractExternalProgramming(args: ExtractExternalProgrammingArgs): Promise<{ sessions: ExtractedExternalSession[] }> {
+  // El documento puede ser largo (una programación de todo un trimestre) y
+  // Gemini tiene que leerlo entero antes de responder: mismo margen que
+  // planLearningUnit, más que el timeout por defecto del cliente.
+  const fn = httpsCallable<ExtractExternalProgrammingArgs, { sessions: ExtractedExternalSession[] }>(
+    functions,
+    'extractExternalProgramming',
+    { timeout: 200_000 }
+  );
+  const res = await fn(args);
+  return res.data;
+}
+
 export async function planLearningUnit(args: PlanLearningUnitArgs): Promise<PlannedLearningUnit> {
   // Es la generación más pesada de toda la app (hasta 15 sesiones completas,
   // cada una con sus objetivos y saberes asignados), así que necesita más

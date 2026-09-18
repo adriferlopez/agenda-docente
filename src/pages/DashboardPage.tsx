@@ -23,6 +23,7 @@ import TagMultiSelect, { type TagOption } from '@/components/ui/TagMultiSelect';
 import { specialTypeLabel, subjectDisplayName } from '@/utils/timetableDisplay';
 import { IconCalendar, IconSettings } from '@/components/ui/icons';
 import { IconUsers, IconChecklist, IconMapPin, IconStar, IconMove } from '@/components/ui/icons-extra';
+import TodaySessionModal, { type TodaySessionData } from '@/components/dashboard/TodaySessionModal';
 import type { Subject, TimetableSlot, WeeklyPlan, WeekDay, Meeting, TeacherTask, MuralItem, MuralFolder, WeeklyCalendarStyle, SubjectColor } from '@/types';
 
 const DEFAULT_SPECIAL_COLOR: SubjectColor = 'butter';
@@ -361,6 +362,9 @@ export default function DashboardPage() {
               subjectById={subjectById}
               planBySlot={planBySlot}
               weeklyCalendarStyle={profile?.weeklyCalendarStyle ?? 'colorBg'}
+              ownerId={user!.uid}
+              schoolYearId={activeYear.id}
+              weekStart={weekStart}
               t={t}
             />
           );
@@ -435,14 +439,34 @@ function WidgetContainer({
 }
 
 // ─── Widget: Horario de hoy ───────────────────────────────────────────
-function TodayWidget({ todayIndex, todaySlots, subjectById, planBySlot, weeklyCalendarStyle, t }: {
+// Clicar una asignatura abre TodaySessionModal con el detalle completo de
+// esa sesión (título, descripción, adjuntos, rúbrica...). El modal se
+// mantiene montado durante el cierre (closingData) para poder reproducir su
+// transición de salida en vez de desmontarse de golpe — ver comentario en
+// TodaySessionModal.tsx.
+function TodayWidget({ todayIndex, todaySlots, subjectById, planBySlot, weeklyCalendarStyle, ownerId, schoolYearId, weekStart, t }: {
   todayIndex: number;
   todaySlots: TimetableSlot[];
   subjectById: Map<string, Subject>;
   planBySlot: Map<string, WeeklyPlan>;
   weeklyCalendarStyle: WeeklyCalendarStyle;
+  ownerId: string;
+  schoolYearId: string;
+  weekStart: string;
   t: TFunction;
 }) {
+  const [selected, setSelected] = useState<TodaySessionData | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+
+  function openSession(data: TodaySessionData) {
+    setSelected(data);
+    setModalOpen(true);
+  }
+  function closeSession() {
+    setModalOpen(false);
+    setTimeout(() => setSelected(null), 300);
+  }
+
   return (
     <Card>
       <h2 className="font-display text-lg mb-3 flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
@@ -468,10 +492,14 @@ function TodayWidget({ todayIndex, todaySlots, subjectById, planBySlot, weeklyCa
             return (
               <div
                 key={slot.id}
+                role={subject ? 'button' : undefined}
+                tabIndex={subject ? 0 : undefined}
+                onClick={subject ? () => openSession({ slot, subject, plan }) : undefined}
+                onKeyDown={subject ? (e) => { if (e.key === 'Enter' || e.key === ' ') openSession({ slot, subject, plan }); } : undefined}
                 style={cell?.style}
                 className={`rounded-2xl overflow-hidden flex items-stretch border ${
                   cell ? `${cell.bg} ${cell.border}` : 'border-transparent bg-accent-light'
-                }`}
+                } ${subject ? 'cursor-pointer transition hover:brightness-95' : ''}`}
               >
                 {cell?.stripe && activeColors && <span className={`w-1.5 shrink-0 ${activeColors.dot}`} />}
                 <div className="flex items-center gap-3 px-3 py-2 flex-1 min-w-0">
@@ -498,6 +526,15 @@ function TodayWidget({ todayIndex, todaySlots, subjectById, planBySlot, weeklyCa
           })}
         </div>
       )}
+
+      <TodaySessionModal
+        data={selected}
+        open={modalOpen}
+        weekStart={weekStart}
+        ownerId={ownerId}
+        schoolYearId={schoolYearId}
+        onClose={closeSession}
+      />
     </Card>
   );
 }

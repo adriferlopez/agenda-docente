@@ -77,19 +77,31 @@ export default function RegisterPage() {
       setError(t('auth.mustAcceptTerms'));
       return;
     }
+    if (etapas.size === 0) {
+      setError(t('auth.etapaRequired'));
+      return;
+    }
     setGoogleLoading(true);
     try {
-      const { isNewUser } = await loginWithGoogle();
+      const { isNewUser } = await loginWithGoogle({
+        language,
+        etapas: Array.from(etapas) as Etapa[],
+        comunitat,
+      });
       if (isNewUser) {
-        // El idioma se detectó del navegador al crear el perfil; lo aplicamos también a i18n.
-        const navLang = (navigator.language || 'es').slice(0, 2).toLowerCase();
-        const supported: Language[] = ['es', 'ca', 'en', 'eu', 'gl'];
-        i18n.changeLanguage(supported.includes(navLang as Language) ? navLang : 'es');
+        i18n.changeLanguage(language);
       }
       navigate('/');
     } catch (err) {
-      if (err instanceof FirebaseError && err.code !== 'auth/popup-closed-by-user') {
-        setError(t('common.error'));
+      // Antes, cualquier error que NO fuera un FirebaseError (p.ej. un fallo
+      // de red genérico o del setDoc de Firestore al crear el perfil) no
+      // mostraba nada: el botón volvía a su estado normal sin más, así que
+      // al docente le parecía que "no funciona" sin ninguna pista de por
+      // qué. Ahora se muestra siempre, salvo cuando el propio docente cierra
+      // el popup o lo cancela (eso no es un error real).
+      const code = err instanceof FirebaseError ? err.code : '';
+      if (code !== 'auth/popup-closed-by-user' && code !== 'auth/cancelled-popup-request') {
+        setError(t('auth.genericError'));
       }
     } finally {
       setGoogleLoading(false);
@@ -113,6 +125,46 @@ export default function RegisterPage() {
           <h2 className="font-display text-3xl font-semibold mb-1" style={{ color: 'var(--text-primary)' }}>
             {t('auth.createAccount')}
           </h2>
+        </div>
+
+        {/* Idioma/comunitat/etapa se piden AQUÍ, antes del botón de Google,
+            porque también se usan para crear el perfil de un registro con
+            Google (que no pasa por el formulario de email de más abajo).
+            Antes vivían dentro de ese formulario y un docente que se
+            registraba con Google nunca llegaba a elegirlos: su perfil se
+            creaba sin comunitat/etapas y el resto de la app caía siempre en
+            Catalunya/Primària por defecto, sin que él lo hubiera decidido. */}
+        <div className="flex flex-col gap-4 mb-5">
+          <Select
+            label={t('settings.language')}
+            value={language}
+            onChange={(e) => setLanguage(e.target.value as Language)}
+          >
+            {LANGUAGES.map((l) => (
+              <option key={l.value} value={l.value}>
+                {l.label}
+              </option>
+            ))}
+          </Select>
+          <Select
+            label={t('settings.comunitat')}
+            value={comunitat}
+            onChange={(e) => setComunitat(e.target.value as Comunitat)}
+          >
+            {COMUNITATS.map((c) => (
+              <option key={c.value} value={c.value}>
+                {c.label}
+              </option>
+            ))}
+          </Select>
+          <TagMultiSelect
+            label={`${t('settings.etapa')} *`}
+            options={ETAPA_OPTIONS}
+            selected={etapas}
+            onChange={setEtapas}
+            placeholder={t('auth.etapaPlaceholder')}
+          />
+          <p className="text-xs text-ink-soft -mt-2">{t('auth.etapaHelp')}</p>
         </div>
 
         <label className="flex items-start gap-2 mb-5 text-xs cursor-pointer" style={{ color: 'var(--text-secondary)' }}>
@@ -146,6 +198,14 @@ export default function RegisterPage() {
         >
           {t('auth.continueWithGoogle')}
         </Button>
+
+        {/* Antes este aviso solo vivía dentro del formulario de email, más
+            abajo: un error al registrarse con Google (justo el botón de
+            arriba) no se veía en ningún sitio visible cerca de donde el
+            docente había hecho click. */}
+        {error && (
+          <p className="text-sm text-rose-600 bg-rose-50 rounded-xl px-3 py-2 mb-4">{error}</p>
+        )}
 
         <div className="flex items-center gap-3 mb-4">
           <span className="h-px flex-1 bg-accent-light" />
@@ -192,40 +252,6 @@ export default function RegisterPage() {
             autoComplete="new-password"
             icon={<IconLock size={16} />}
           />
-          <Select
-            label={t('settings.language')}
-            value={language}
-            onChange={(e) => setLanguage(e.target.value as Language)}
-          >
-            {LANGUAGES.map((l) => (
-              <option key={l.value} value={l.value}>
-                {l.label}
-              </option>
-            ))}
-          </Select>
-          <Select
-            label={t('settings.comunitat')}
-            value={comunitat}
-            onChange={(e) => setComunitat(e.target.value as Comunitat)}
-          >
-            {COMUNITATS.map((c) => (
-              <option key={c.value} value={c.value}>
-                {c.label}
-              </option>
-            ))}
-          </Select>
-          <TagMultiSelect
-            label={`${t('settings.etapa')} *`}
-            options={ETAPA_OPTIONS}
-            selected={etapas}
-            onChange={setEtapas}
-            placeholder={t('auth.etapaPlaceholder')}
-          />
-          <p className="text-xs text-ink-soft -mt-2">{t('auth.etapaHelp')}</p>
-
-          {error && (
-            <p className="text-sm text-rose-600 bg-rose-50 rounded-xl px-3 py-2">{error}</p>
-          )}
 
           <Button type="submit" disabled={loading || !acceptedTerms} fullWidth size="lg">
             {t('auth.register')}

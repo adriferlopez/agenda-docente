@@ -96,8 +96,13 @@ export default function AnnualPlanningPage() {
   useEffect(() => {
     if (!user || !activeYear) return;
     return subscribeAllWeeklyPlans(user.uid, activeYear.id, (raw) => {
+      // Las sesiones marcadas como "continuación de la anterior" se incluyen
+      // aunque no tengan título: no son una actividad real, pero deben
+      // quedar constancia de ellas en la programación anual y el PDF (si no,
+      // parecería que ese día no se dio clase). Se distinguen del resto al
+      // renderizar (fila discreta en vez de tarjeta completa).
       const filtered = raw
-        .filter((p) => p.title?.trim())
+        .filter((p) => p.title?.trim() || p.isContinuation)
         .sort((a, b) => a.weekStartDate.localeCompare(b.weekStartDate));
       setPlans(filtered);
     });
@@ -217,14 +222,31 @@ export default function AnnualPlanningPage() {
 
   const effectiveTerms = useMemo(() => (activeYear ? getEffectiveTerms(activeYear) : []), [activeYear]);
 
-  // Actividades de la asignatura seleccionada que aún no tienen ni objetivos
-  // ni saberes asignados (normalmente porque no se crearon con el
-  // planificador de unidad de Profi, que ya los genera en la misma llamada
-  // que planifica las sesiones). El botón bulk de abajo las completa todas
-  // de una vez, en una sola llamada a Gemini.
+  // Catálogo de saberes disponible para la asignatura seleccionada: si está
+  // vacío (la asignatura no tiene ningún área de currículum vinculada en
+  // Asignaturas), Profi nunca podrá asignar saberes por mucho que se
+  // reintente, así que no tiene sentido seguir considerando "pendiente" una
+  // actividad solo porque le falten saberes en ese caso.
+  const hasCurriculumCatalog = (curriculumBySubject.get(selectedSubjectId) ?? []).length > 0;
+
+  // Actividades de la asignatura seleccionada que aún no tienen objetivos, o
+  // que les faltan saberes y sí hay un catálogo del que asignarlos
+  // (normalmente porque no se crearon con el planificador de unidad de
+  // Profi, que ya genera ambos en la misma llamada que planifica las
+  // sesiones). El botón bulk de abajo las completa todas de una vez, en una
+  // sola llamada a Gemini. Importante: NO exigir que falten los dos campos a
+  // la vez — si una ronda anterior ya generó objetivos pero dejó los saberes
+  // vacíos (p.ej. porque en ese momento no había catálogo), la actividad
+  // debe seguir apareciendo como pendiente en cuanto haya catálogo,
+  // para poder reintentar solo esa parte.
   const pendingObjectivesAndSabers = useMemo(
-    () => subjectPlans.filter((p) => !p.aiObjectives && (!p.curriculumItemIds || p.curriculumItemIds.length === 0)),
-    [subjectPlans]
+    () =>
+      subjectPlans.filter((p) => {
+        const missingObjectives = !p.aiObjectives;
+        const missingSabers = hasCurriculumCatalog && (!p.curriculumItemIds || p.curriculumItemIds.length === 0);
+        return missingObjectives || missingSabers;
+      }),
+    [subjectPlans, hasCurriculumCatalog]
   );
 
   const BULK_OBJECTIVES_SABERS_KEY = 'bulk-objectives-sabers';
@@ -457,6 +479,24 @@ export default function AnnualPlanningPage() {
 
             const activityCards = group.plans.map((plan) => {
               const subjectColors = subject ? subjectColorClasses[subject.color] : null;
+
+              // Sesión "continuación de la anterior": no es una actividad
+              // real (se dejó así a propósito al desplazar la sesión previa
+              // a dos días), así que se muestra como una fila discreta en
+              // vez de la tarjeta completa con objetivos/saberes/rúbrica.
+              if (plan.isContinuation) {
+                return (
+                  <div
+                    key={plan.id}
+                    className="text-xs italic rounded-xl px-3 py-2 flex items-center gap-2"
+                    style={{ color: 'var(--text-secondary)', background: 'var(--bg-input)' }}
+                  >
+                    <span className="font-medium not-italic">{t('annual.week')} {plan.weekStartDate}:</span>
+                    {t('weekly.continuationOfPrevious')}
+                  </div>
+                );
+              }
+
               const curriculumItems = (plan.curriculumItemIds ?? [])
                 .map((id) => curriculumById.get(id))
                 .filter((i): i is SaberItem => Boolean(i));
@@ -517,6 +557,8 @@ export default function AnnualPlanningPage() {
                                 </li>
                               ))}
                             </ul>
+                          ) : (curriculumBySubject.get(plan.subjectId) ?? []).length === 0 ? (
+                            <p className="text-sm text-ink-soft italic">{t('annual.saberesEmpty')}</p>
                           ) : (
                             <p className="text-sm text-ink-soft italic">{t('annual.curriculumNotGenerated')}</p>
                           )}
@@ -608,6 +650,7 @@ export default function AnnualPlanningPage() {
           allSubjects={subjects}
           allSlots={allSlots}
           effectiveTerms={effectiveTerms}
+          curriculumBySubject={curriculumBySubject}
           ownerId={user.uid}
           schoolYearId={activeYear.id}
           onClose={() => setCopySaTarget(null)}
@@ -1001,13 +1044,14 @@ function EditPlanModal({
 // partir de esa fecha, igual que hace Profi al incorporar una unidad
 // planificada a la programación semanal (ver ProfiTools.tsx > handleSave).
 // -----------------------------------------------------------------------
-function CopySaToGroupModal({ situation, plans, subject, allSubjects, allSlots, effectiveTerms, ownerId, schoolYearId, onClose }: {
+function CopySaToGroupModal({ situation, plans, subject, allSubjects, allSlots, effectiveTerms, curriculumBySubject, ownerId, schoolYearId, onClose }: {
   situation: LearningSituation;
   plans: WeeklyPlan[];
   subject: Subject;
   allSubjects: Subject[];
   allSlots: TimetableSlot[];
   effectiveTerms: ReturnType<typeof getEffectiveTerms>;
+  curriculumBySubject: Map<string, SaberItem[]>;
   ownerId: string;
   schoolYearId: string;
   onClose: () => void;
@@ -1076,6 +1120,12 @@ function CopySaToGroupModal({ situation, plans, subject, allSubjects, allSlots, 
           const subjectSlots = slotsBySubject.get(targetSubjectId) ?? [];
           const rawStart = startDateBySubject[targetSubjectId] || today;
           const effectiveStart = rawStart > today ? rawStart : today;
+          // Saberes ya asignados a cada sesión (por su id "área::bloc::curso::índice")
+          // solo se copian si existen también en el catálogo propio de la
+          // asignatura destino — así nunca se traslada un saber que no le
+          // corresponda si el curso no coincidiera del todo. Los objetivos
+          // son texto libre y se copian siempre tal cual.
+          const validItemIds = new Set((curriculumBySubject.get(targetSubjectId) ?? []).map((i) => i.id));
 
           // Reparte en cascada las N sesiones sobre las franjas propias del
           // grupo destino, semana a semana, empezando en la fecha elegida.
@@ -1113,6 +1163,8 @@ function CopySaToGroupModal({ situation, plans, subject, allSubjects, allSlots, 
                 evaluate: plans[i].evaluate,
                 status: 'planned',
                 saId: newSaId,
+                aiObjectives: plans[i].aiObjectives ?? '',
+                curriculumItemIds: (plans[i].curriculumItemIds ?? []).filter((id) => validItemIds.has(id)),
               })
             )
           );

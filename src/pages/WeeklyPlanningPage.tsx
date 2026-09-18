@@ -51,7 +51,8 @@ import { subjectDisplayName } from '@/utils/timetableDisplay';
 import Modal from '@/components/ui/Modal';
 import DriveAttachmentPicker from '@/components/weekly/DriveAttachmentPicker';
 import TagMultiSelect from '@/components/ui/TagMultiSelect';
-import { IconChevronLeft, IconChevronRight, IconSparkles, IconCheck, IconEdit, IconTrash, IconCalendar } from '@/components/ui/icons';
+import ImportExternalProgramModal from '@/components/weekly/ImportExternalProgramModal';
+import { IconChevronLeft, IconChevronRight, IconSparkles, IconCheck, IconEdit, IconTrash, IconCalendar, IconUpload } from '@/components/ui/icons';
 import { IconLink, IconMessage } from '@/components/ui/icons-extra';
 import type { Subject, TimetableSlot, WeeklyPlan, WeekDay, Rubric, DayStatusType, SchoolHoliday, Meeting, MeetingFolder, LearningSituation, WeeklyCalendarStyle, PastelFolderColor } from '@/types';
 import { DAY_STATUS_TYPES, PASTEL_FOLDER_COLORS } from '@/types';
@@ -87,6 +88,7 @@ export default function WeeklyPlanningPage() {
   const [holidays, setHolidays] = useState<SchoolHoliday[]>([]);
   const [showHolidaysModal, setShowHolidaysModal] = useState(false);
   const [showExcursionModal, setShowExcursionModal] = useState(false);
+  const [showImportExternalModal, setShowImportExternalModal] = useState(false);
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [meetingFolders, setMeetingFolders] = useState<MeetingFolder[]>([]);
   const [editingMeeting, setEditingMeeting] = useState<Meeting | null>(null);
@@ -285,6 +287,9 @@ export default function WeeklyPlanningPage() {
           </Button>
           <Button size="sm" variant="secondary" icon={<IconCalendar size={16} />} onClick={() => setShowExcursionModal(true)}>
             {t('weekly.excursions.button')}
+          </Button>
+          <Button size="sm" variant="secondary" icon={<IconUpload size={16} />} onClick={() => setShowImportExternalModal(true)}>
+            {t('weekly.importExternal.button')}
           </Button>
           <label
             className="flex items-center gap-1.5 text-xs font-medium cursor-pointer select-none px-1"
@@ -550,6 +555,19 @@ export default function WeeklyPlanningPage() {
           ownerId={user!.uid}
           schoolYearId={activeYear.id}
           onClose={() => setShowExcursionModal(false)}
+        />
+      )}
+
+      {showImportExternalModal && (
+        <ImportExternalProgramModal
+          subjects={subjects}
+          allSlots={slots}
+          ownerId={user!.uid}
+          schoolYearId={activeYear.id}
+          schoolYearStartDate={activeYear.startDate}
+          schoolYearEndDate={activeYear.endDate}
+          language={profile?.language ?? 'es'}
+          onClose={() => setShowImportExternalModal(false)}
         />
       )}
 
@@ -1463,7 +1481,9 @@ function PlanViewModal({ slot, subject, plan, allRubrics, allSlots, allPlans, sc
         </div>
 
         {!plan?.title ? (
-          <p className="text-sm text-ink-soft italic">{t('weekly.noPlanForSession')}</p>
+          <p className="text-sm text-ink-soft italic">
+            {plan?.isContinuation ? t('weekly.continuationOfPrevious') : t('weekly.noPlanForSession')}
+          </p>
         ) : (
           <>
             <div>
@@ -1732,6 +1752,10 @@ function ShiftChainModal({ slot, weekStart, allSlots, allPlans, schoolYearEndDat
   const { t } = useTranslation();
   const [moving, setMoving] = useState(false);
   const [error, setError] = useState('');
+  // Qué es la sesión que queda libre tras el desplazamiento: por defecto
+  // "sesión nueva" (comportamiento de siempre), o "continuación" si el
+  // docente indica que la sesión que acaba de mover se dio en dos días.
+  const [gapChoice, setGapChoice] = useState<'new' | 'continuation'>('new');
 
   const planByKey = useMemo(() => {
     const m = new Map<string, WeeklyPlan>();
@@ -1771,7 +1795,7 @@ function ShiftChainModal({ slot, weekStart, allSlots, allPlans, schoolYearEndDat
     try {
       // Contenido actual de cada eslabón, capturado antes de escribir nada.
       const contents = chain.map((occ) => weeklyPlanContentFrom(planAt(occ)));
-      const writes: { timetableSlotId: string; subjectId: string; weekStartDate: string; content: typeof contents[number] }[] = [];
+      const writes: { timetableSlotId: string; subjectId: string; weekStartDate: string; content: typeof contents[number]; isContinuation?: boolean }[] = [];
       for (let i = 1; i < chain.length; i++) {
         const destSlot = allSlots.find((s) => s.id === chain[i].timetableSlotId);
         if (!destSlot?.subjectId) continue;
@@ -1787,6 +1811,7 @@ function ShiftChainModal({ slot, weekStart, allSlots, allPlans, schoolYearEndDat
         subjectId: slot.subjectId,
         weekStartDate: chain[0].weekStartDate,
         content: EMPTY_WEEKLY_PLAN_CONTENT,
+        isContinuation: gapChoice === 'continuation',
       });
       await shiftWeeklyPlanChain(ownerId, schoolYearId, writes);
       onMoved();
@@ -1822,6 +1847,33 @@ function ShiftChainModal({ slot, weekStart, allSlots, allPlans, schoolYearEndDat
             })}
           </div>
         )}
+
+        {canShift && (
+          <div className="flex flex-col gap-1.5">
+            <p className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>
+              {t('weekly.shiftChain.gapQuestion')}
+            </p>
+            {(['new', 'continuation'] as const).map((opt) => (
+              <label
+                key={opt}
+                className="flex items-start gap-2 text-xs rounded-lg px-2.5 py-2 cursor-pointer"
+                style={{ background: gapChoice === opt ? 'var(--accent-light)' : 'var(--bg-input)' }}
+              >
+                <input
+                  type="radio"
+                  name="shiftGapChoice"
+                  checked={gapChoice === opt}
+                  onChange={() => setGapChoice(opt)}
+                  className="mt-0.5 shrink-0"
+                />
+                <span className={gapChoice === opt ? 'text-accent font-medium' : ''}>
+                  {opt === 'new' ? t('weekly.shiftChain.gapNew') : t('weekly.shiftChain.gapContinuation')}
+                </span>
+              </label>
+            ))}
+          </div>
+        )}
+
         {error && <p className="text-xs text-rose-600">{error}</p>}
         <div className="flex gap-2">
           <Button onClick={handleShift} disabled={!canShift || moving}>
@@ -2071,8 +2123,12 @@ function PlanEditorModal({ slot, subject, plan, allRubrics, allSubjects, allSlot
         aiSuggestions,
         status: status ?? plan?.status ?? 'planned',
       });
+      // Antes esto también cerraba el modal a los 1.5s. El docente pedía
+      // poder seguir viendo/editando la actividad tras guardar (por ejemplo
+      // para generar la rúbrica o revisar algo más) sin que se le cerrara
+      // solo: ahora el modal se queda abierto y solo lo cierra la X.
       setSaved(true);
-      setTimeout(() => { setSaved(false); onClose(); }, 1500);
+      setTimeout(() => setSaved(false), 1500);
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : t('common.error'));
     } finally {

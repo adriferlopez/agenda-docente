@@ -11,7 +11,7 @@ import {
   verifyBeforeUpdateEmail,
   type User,
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp, terminate, clearIndexedDbPersistence } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { auth, db, functions } from '@/firebase/config';
 import type { UserProfile, Language } from '@/types';
@@ -60,10 +60,20 @@ export async function loginWithEmail(email: string, password: string): Promise<U
 
 /**
  * Inicia sesión con Google. Si es la primera vez que este usuario entra,
- * crea su perfil en Firestore usando el idioma detectado del navegador
- * (no podemos preguntárselo, ya que no hay paso de registro manual).
+ * crea su perfil en Firestore. `profileDefaults` permite que RegisterPage
+ * pase la comunidad autónoma/etapas/idioma que el docente ya haya elegido
+ * en el formulario (antes esto se perdía siempre: el perfil de un docente
+ * registrado con Google se creaba sin `etapas` ni `comunitat`, así que toda
+ * la app caía en los valores por defecto — Catalunya/Primària — sin que el
+ * docente hubiera podido elegir los suyos). Si no se pasa nada (p.ej. desde
+ * LoginPage, donde no hay ese formulario), se mantiene el comportamiento de
+ * antes: solo el idioma detectado del navegador.
  */
-export async function loginWithGoogle(): Promise<{ user: User; isNewUser: boolean }> {
+export async function loginWithGoogle(profileDefaults?: {
+  language?: Language;
+  etapas?: Etapa[];
+  comunitat?: Comunitat;
+}): Promise<{ user: User; isNewUser: boolean }> {
   const provider = new GoogleAuthProvider();
   const cred = await signInWithPopup(auth, provider);
   const userRef = doc(db, 'users', cred.user.uid);
@@ -76,7 +86,9 @@ export async function loginWithGoogle(): Promise<{ user: User; isNewUser: boolea
       uid: cred.user.uid,
       email: cred.user.email ?? '',
       displayName: cred.user.displayName ?? '',
-      language: detectBrowserLanguage(),
+      language: profileDefaults?.language ?? detectBrowserLanguage(),
+      ...(profileDefaults?.etapas && profileDefaults.etapas.length > 0 ? { etapas: profileDefaults.etapas } : {}),
+      ...(profileDefaults?.comunitat ? { comunitat: profileDefaults.comunitat } : {}),
       onboardingSeen: false,
       createdAt: serverTimestamp(),
     };
@@ -120,8 +132,35 @@ export async function changeEmailRequest(user: User, currentPassword: string, ne
   await verifyBeforeUpdateEmail(user, newEmail);
 }
 
+/**
+ * Cierra la sesión y borra también la copia local (IndexedDB) que Firestore
+ * guarda en el navegador para poder funcionar offline. Sin esto, en un
+ * ordenador compartido (sala de profesores, aula...) los datos del docente
+ * -incluidos los de su alumnado- quedarían legibles en ese navegador aunque
+ * la sesión ya estuviera cerrada, porque son solo una copia local, no algo
+ * protegido por las reglas de seguridad de Firestore (esas solo protegen el
+ * acceso al servidor).
+ *
+ * clearIndexedDbPersistence exige que la instancia de Firestore no esté ya
+ * en marcha, así que primero hay que "terminate" (parar) la instancia: a
+ * partir de ese momento cualquier listener en tiempo real que siguiera activo
+ * deja de recibir actualizaciones (no lanza error), y cualquier otro intento
+ * de usar `db` lanzaría un error. Por eso el llamante (ver AppLayout.tsx)
+ * hace una recarga completa de página justo después, en vez de navegar con
+ * el router: así no queda ningún componente todavía montado que pueda
+ * intentar usar `db` una vez terminada.
+ */
 export async function signOut(): Promise<void> {
   await fbSignOut(auth);
+  try {
+    await terminate(db);
+    await clearIndexedDbPersistence(db);
+  } catch {
+    // Si algún listener no llegó a soltar `db` a tiempo, o el navegador no
+    // soporta IndexedDB persistente (p. ej. algunos modos privados), no
+    // bloqueamos el cierre de sesión: la sesión ya se ha cerrado igualmente,
+    // solo queda sin limpiar la copia local en ese caso concreto.
+  }
 }
 
 /**
@@ -136,7 +175,11 @@ export async function signOut(): Promise<void> {
 export async function deleteAccountRequest(): Promise<void> {
   const fn = httpsCallable(functions, 'deleteAccount');
   await fn({});
-  await fbSignOut(auth);
+  // Reutiliza signOut() (no solo fbSignOut) para que también se borre la
+  // copia local en IndexedDB: aunque la cuenta ya no exista en el servidor,
+  // sin esto los datos seguirían legibles en este navegador hasta que algo
+  // más los sobrescribiera.
+  await signOut();
 }
 
 export async function fetchUserProfile(uid: string): Promise<UserProfile | null> {

@@ -230,7 +230,7 @@ export function weeklyPlanContentFrom(plan?: WeeklyPlan): WeeklyPlanContent {
 export async function shiftWeeklyPlanChain(
   ownerId: string,
   schoolYearId: string,
-  writes: { timetableSlotId: string; subjectId: string; weekStartDate: string; content: WeeklyPlanContent }[]
+  writes: { timetableSlotId: string; subjectId: string; weekStartDate: string; content: WeeklyPlanContent; isContinuation?: boolean }[]
 ): Promise<void> {
   const batch = writeBatch(db);
   for (const w of writes) {
@@ -255,6 +255,11 @@ export async function shiftWeeklyPlanChain(
         referenceImageUrl: w.content.referenceImageUrl ?? deleteField(),
         saLabel: w.content.saLabel ?? deleteField(),
         saId: w.content.saId ?? deleteField(),
+        // Se limpia siempre (deleteField si no se pasa true) salvo en el
+        // eslabón origen cuando el docente elige "continuación de la
+        // sesión anterior": los destinos que reciben contenido desplazado
+        // ya no son un hueco, así que no deben arrastrar una marca vieja.
+        isContinuation: w.isContinuation ? true : deleteField(),
         postClassEvaluation: deleteField(),
         aiSuggestions: deleteField(),
         status: 'planned',

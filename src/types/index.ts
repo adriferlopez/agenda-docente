@@ -219,6 +219,14 @@ export interface WeeklyPlan {
   // mientras esté marcada. `color` es opcional: si no se elige ninguno, la
   // vista mensual usa el color por defecto de ese tipo de evento.
   dayStatus?: { type: DayStatusType; note?: string; color?: PastelFolderColor };
+  // Marca esta franja como "continuación" de la sesión anterior en vez de
+  // como un hueco por planificar: la sesión de antes se dio en dos días
+  // distintos (se alargó). No es una actividad independiente, así que se
+  // deja sin title/description a propósito y la cuadrícula semanal la
+  // sigue mostrando como vacía; solo se distingue en el detalle de la
+  // sesión, en la Programación anual y en el PDF exportado, para que quede
+  // constancia de que no es un día sin dar clase.
+  isContinuation?: boolean;
   createdAt: number;
   updatedAt: number;
 }

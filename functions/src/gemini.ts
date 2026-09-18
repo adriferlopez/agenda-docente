@@ -100,6 +100,19 @@ const QUOTA_MESSAGE =
  * exámenes).
  */
 export async function generateText(uid: string, prompt: string, config?: GenerateContentConfig): Promise<string> {
+  const { text } = await generateTextWithMeta(uid, prompt, config);
+  return text;
+}
+
+/**
+ * Igual que generateText, pero además informa si la respuesta se cortó por
+ * haber agotado maxOutputTokens (finishReason "MAX_TOKENS"). Lo usan las
+ * llamadas que generan JSON largo y estructurado (p.ej. planLearningUnit),
+ * donde una respuesta cortada a medias hace fallar el parseo y, sin esta
+ * señal, el docente solo veía un volcado de JSON crudo sin explicación de
+ * qué había pasado ni de cómo solucionarlo.
+ */
+export async function generateTextWithMeta(uid: string, prompt: string, config?: GenerateContentConfig): Promise<{ text: string; truncated: boolean }> {
   if (prompt.length > MAX_PROMPT_CHARS) {
     throw new HttpsError('invalid-argument', 'El texto es demasiado largo para procesarlo.');
   }
@@ -113,7 +126,8 @@ export async function generateText(uid: string, prompt: string, config?: Generat
         ...(config ? { config } : {}),
       })
     );
-    return (response.text ?? '').trim();
+    const truncated = response.candidates?.[0]?.finishReason === 'MAX_TOKENS';
+    return { text: (response.text ?? '').trim(), truncated };
   } catch (err) {
     const kind = classifyTransientError(err);
     if (kind === 'quota') throw new HttpsError('resource-exhausted', QUOTA_MESSAGE);
@@ -130,6 +144,12 @@ export async function generateText(uid: string, prompt: string, config?: Generat
  * "ve" tablas, esquemas o imágenes del documento).
  */
 export async function generateTextWithPdf(uid: string, prompt: string, pdfBase64: string, config?: GenerateContentConfig): Promise<string> {
+  const { text } = await generateTextWithPdfMeta(uid, prompt, pdfBase64, config);
+  return text;
+}
+
+/** Igual que generateTextWithPdf, pero informa si la respuesta se cortó por maxOutputTokens (ver generateTextWithMeta más arriba). */
+export async function generateTextWithPdfMeta(uid: string, prompt: string, pdfBase64: string, config?: GenerateContentConfig): Promise<{ text: string; truncated: boolean }> {
   if (prompt.length > MAX_PROMPT_CHARS) {
     throw new HttpsError('invalid-argument', 'El texto es demasiado largo para procesarlo.');
   }
@@ -149,7 +169,8 @@ export async function generateTextWithPdf(uid: string, prompt: string, pdfBase64
         ...(config ? { config } : {}),
       })
     );
-    return (response.text ?? '').trim();
+    const truncated = response.candidates?.[0]?.finishReason === 'MAX_TOKENS';
+    return { text: (response.text ?? '').trim(), truncated };
   } catch (err) {
     const kind = classifyTransientError(err);
     if (kind === 'quota') throw new HttpsError('resource-exhausted', QUOTA_MESSAGE);
