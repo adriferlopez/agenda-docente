@@ -6,7 +6,8 @@ import { subscribeSubjects } from '@/firebase/subjects';
 import { subscribeStudents, updateStudentsOrder } from '@/firebase/students';
 import { formatStudentName, sortStudents } from '@/utils/students';
 import { subscribeStudentAdaptations } from '@/firebase/studentAdaptations';
-import { subscribeStudentNotes } from '@/firebase/studentNotes';
+import { subscribeStudentNotes, decryptStudentNote } from '@/firebase/studentNotes';
+import { useNotesEncryptionStore } from '@/store/notesEncryptionStore';
 import {
   subscribeGradebookActivities,
   createGradebookActivity,
@@ -1483,18 +1484,47 @@ function CommentModal({
 
   // Anotaciones de seguimiento de tutoría del alumno (apartado Alumnat),
   // para poder incluir el contexto de las categorías que elija el docente
-  // (actitud, comportamiento...) al generar el comentario con Profi.
+  // (actitud, comportamiento...) al generar el comentario con Profi. Están
+  // cifradas de extremo a extremo (ver src/crypto/notesEncryption.ts), así
+  // que hace falta la DEK del docente (desbloqueada en Alumnat, en memoria)
+  // para poder leerlas aquí; sin ella, simplemente no aparecen.
   const [tutoringNotes, setTutoringNotes] = useState<StudentNote[]>([]);
+  const [decryptedTutoringNotes, setDecryptedTutoringNotes] = useState<{ text: string; category?: string }[]>([]);
   const [tutoringCategories, setTutoringCategories] = useState<Set<string>>(new Set());
+  const notesDek = useNotesEncryptionStore((s) => s.dek);
 
   useEffect(() => {
     return subscribeStudentNotes(ownerId, student.id, setTutoringNotes);
   }, [ownerId, student.id]);
 
+  useEffect(() => {
+    if (!notesDek) {
+      setDecryptedTutoringNotes([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const results: { text: string; category?: string }[] = [];
+      for (const note of tutoringNotes) {
+        try {
+          const { text, category } = await decryptStudentNote(notesDek, note);
+          results.push({ text, category });
+        } catch {
+          // Nota cifrada con una clave distinta (no debería pasar en
+          // condiciones normales): se omite en vez de romper el resto.
+        }
+      }
+      if (!cancelled) setDecryptedTutoringNotes(results);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [notesDek, tutoringNotes]);
+
   const tutoringCategoryOptions = useMemo(() => {
-    const cats = new Set(tutoringNotes.map((n) => n.category || t('grades.tutoringGeneral')));
+    const cats = new Set(decryptedTutoringNotes.map((n) => n.category || t('grades.tutoringGeneral')));
     return Array.from(cats);
-  }, [tutoringNotes, t]);
+  }, [decryptedTutoringNotes, t]);
 
   function toggleTutoringCategory(category: string) {
     setTutoringCategories((prev) => {
@@ -1639,7 +1669,7 @@ function CommentModal({
         .filter((c) => profiCeIds.has(c.key))
         .map((c) => ({ id: c.ce.id, title: c.ce.title, description: c.ce.description }));
       const studentName = student.lastName ? `${student.firstName} ${student.lastName}` : student.firstName;
-      const tutoringText = tutoringNotes
+      const tutoringText = decryptedTutoringNotes
         .filter((n) => tutoringCategories.has(n.category || t('grades.tutoringGeneral')))
         .map((n) => `- ${n.text}`)
         .join('\n');
@@ -1775,6 +1805,12 @@ function CommentModal({
                 onChange={handleToggleCe}
                 placeholder={t('grades.profiPriorityCePlaceholder')}
               />
+            )}
+
+            {tutoringNotes.length > 0 && !notesDek && (
+              <p className="text-xs text-ink-soft bg-accent-light/40 rounded-xl px-3 py-2">
+                {t('grades.tutoringLocked')}
+              </p>
             )}
 
             {tutoringCategoryOptions.length > 0 && (

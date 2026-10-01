@@ -61,7 +61,22 @@ self.addEventListener('fetch', (event) => {
           caches.open(CACHE_NAME).then((cache) => cache.put('/index.html', copy));
           return response;
         })
-        .catch(() => caches.match('/index.html').then((cached) => cached || caches.match('/')))
+        .catch(async () => {
+          // Si falla la red (o el propio worker de Cloudflare da un error
+          // puntual) y tampoco hay nada en caché todavía (p.ej. primera
+          // visita), NUNCA hay que dejar que esto resuelva a `undefined`:
+          // el navegador exige que respondWith() reciba siempre un objeto
+          // Response real, si no lanza "Failed to convert value to
+          // 'Response'" en la consola y la navegación falla por completo.
+          const cached = (await caches.match('/index.html')) || (await caches.match('/'));
+          return (
+            cached ||
+            new Response('Sin conexión. Vuelve a intentarlo en unos segundos.', {
+              status: 503,
+              headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+            })
+          );
+        })
     );
     return;
   }
@@ -85,7 +100,8 @@ self.addEventListener('fetch', (event) => {
   }
 
   // Resto de estáticos propios (iconos, manifest...): red primero, copia
-  // local como respaldo si falla.
+  // local como respaldo si falla. Igual que arriba: si tampoco hay copia
+  // local, se responde con un Response real (nunca `undefined`).
   event.respondWith(
     fetch(request)
       .then((response) => {
@@ -93,6 +109,6 @@ self.addEventListener('fetch', (event) => {
         caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
         return response;
       })
-      .catch(() => caches.match(request))
+      .catch(async () => (await caches.match(request)) || new Response('', { status: 504 }))
   );
 });

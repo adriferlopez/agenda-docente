@@ -72,9 +72,22 @@ function classifyTransientError(err: unknown): 'overloaded' | 'quota' | null {
   return null;
 }
 
-/** Reintenta una llamada a Gemini un par de veces (con espera creciente) si el error es transitorio (sobrecarga o cuota); cualquier otro error se propaga de inmediato. */
+/**
+ * Reintenta una llamada a Gemini varias veces (con espera creciente) si el
+ * error es transitorio (sobrecarga o cuota); cualquier otro error se
+ * propaga de inmediato.
+ *
+ * El 503 "model is overloaded" es un problema real y documentado del lado
+ * de Google (capacidad compartida saturada en horas de mucha demanda, no
+ * algo específico de esta app ni de la clave del docente), y Google
+ * recomienda explícitamente reintentar con espera creciente. 3 reintentos
+ * (hasta ~10s extra en el peor caso) caben con margen incluso en las
+ * funciones con el timeout más corto (60s: generateGradeComment,
+ * generateGradeBandPhrases, matchCriteriaToCompetencies), y dan bastantes
+ * más papeletas de que la segunda o tercera vez sí haya hueco.
+ */
 async function withOverloadRetry<T>(fn: () => Promise<T>): Promise<T> {
-  const delaysMs = [1000, 3000];
+  const delaysMs = [1000, 3000, 6000];
   for (let attempt = 0; ; attempt++) {
     try {
       return await fn();

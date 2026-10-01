@@ -43,6 +43,24 @@ export interface UserProfile {
   hideSubjectsOnHolidays?: boolean;
   /** Estilo visual de las tarjetas de asignatura en la vista semanal de Programación semanal. Por defecto 'colorBg' (el estilo original: fondo de color pastel). */
   weeklyCalendarStyle?: WeeklyCalendarStyle;
+  /**
+   * Configuración del cifrado de extremo a extremo de las anotaciones de
+   * alumnado (ver StudentsPage.tsx y src/crypto/notesEncryption.ts). Solo
+   * contiene material público por diseño (sales, IVs, y la clave de cifrado
+   * de datos envuelta/cifrada de dos formas independientes): nada de esto
+   * permite reconstruir la frase secreta del docente, su código de
+   * recuperación, ni el contenido de las notas. Si no está definido, el
+   * docente aún no ha activado el cifrado.
+   */
+  notesEncryption?: {
+    enabled: boolean;
+    passphraseSalt: string;
+    passphraseIterations: number;
+    wrappedDekByPassphrase: string;
+    wrappedDekByPassphraseIv: string;
+    wrappedDekByRecovery: string;
+    wrappedDekByRecoveryIv: string;
+  };
 }
 
 /**
@@ -622,17 +640,35 @@ export interface StudentAdaptation {
 // tutoría), independientes de cualquier asignatura: observaciones,
 // incidencias, actitud, comportamiento, etc.
 // ---------------------------------------------------------------------
+/**
+ * Anotación de alumnado cifrada de extremo a extremo (ver
+ * src/crypto/notesEncryption.ts): `textCiphertext`/`textIv` y
+ * `categoryCiphertext`/`categoryIv` son ilegibles sin la clave de cifrado
+ * de datos (DEK) del docente, que nunca se guarda en Firestore. Los campos
+ * `text`/`category` en claro son opcionales y solo existen en notas
+ * antiguas creadas antes de activar el cifrado (ver migrateLegacyNote en
+ * firebase/studentNotes.ts, que las recifra en cuanto el docente desbloquea
+ * sus notas por primera vez).
+ */
 export interface StudentNote {
   id: string;
   ownerId: string;
   schoolYearId: string;
   studentId: string;
-  text: string;
+  /** @deprecated Solo en notas antiguas sin cifrar, pendientes de migrar. */
+  text?: string;
+  /** @deprecated Solo en notas antiguas sin cifrar, pendientes de migrar. */
+  category?: string;
+  textCiphertext?: string;
+  textIv?: string;
   // Categoría libre elegida/escrita por el docente (p.ej. "Actitud",
   // "Comportamiento", "Familia"...). Vacía/ausente = "General". Sirve para
   // que el docente pueda elegir qué bloque de anotaciones usar como
-  // contexto al generar un comentario con Profi (ver CommentModal).
-  category?: string;
+  // contexto al generar un comentario con Profi (ver CommentModal). Se
+  // cifra igual que el texto porque también puede contener información
+  // sensible (p.ej. "Salud", "Situación familiar").
+  categoryCiphertext?: string;
+  categoryIv?: string;
   createdAt: number;
 }
 

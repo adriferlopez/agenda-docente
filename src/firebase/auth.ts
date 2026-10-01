@@ -16,6 +16,7 @@ import { httpsCallable } from 'firebase/functions';
 import { auth, db, functions } from '@/firebase/config';
 import type { UserProfile, Language } from '@/types';
 import type { Etapa, Comunitat } from '@/data/curriculum/types';
+import { useNotesEncryptionStore } from '@/store/notesEncryptionStore';
 
 const SUPPORTED_LANGUAGES: Language[] = ['es', 'ca', 'en', 'eu', 'gl'];
 
@@ -152,6 +153,11 @@ export async function changeEmailRequest(user: User, currentPassword: string, ne
  */
 export async function signOut(): Promise<void> {
   await fbSignOut(auth);
+  // La clave de cifrado de las anotaciones de alumnado solo vive en memoria
+  // (ver store/notesEncryptionStore.ts): al cerrar sesión hay que borrarla
+  // explícitamente, para que en un ordenador compartido no quede
+  // desbloqueada para quien inicie sesión después.
+  useNotesEncryptionStore.getState().lock();
   try {
     await terminate(db);
     await clearIndexedDbPersistence(db);
@@ -204,6 +210,20 @@ export async function fetchUserProfile(uid: string): Promise<UserProfile | null>
     onboardingSeen: data.onboardingSeen,
     hideSubjectsOnHolidays: data.hideSubjectsOnHolidays,
     weeklyCalendarStyle: data.weeklyCalendarStyle,
+    notesEncryption: data.notesEncryption,
     createdAt: data.createdAt?.toMillis ? data.createdAt.toMillis() : Date.now(),
   };
+}
+
+/**
+ * Guarda en el perfil del docente la configuración de cifrado de las
+ * anotaciones de alumnado (ver src/crypto/notesEncryption.ts). Solo
+ * contiene material público por diseño (sales, IVs y la DEK envuelta dos
+ * veces): nunca la frase secreta ni el código de recuperación en claro.
+ */
+export async function saveNotesEncryptionConfig(
+  uid: string,
+  config: NonNullable<UserProfile['notesEncryption']>
+): Promise<void> {
+  await setDoc(doc(db, 'users', uid), { notesEncryption: config }, { merge: true });
 }
